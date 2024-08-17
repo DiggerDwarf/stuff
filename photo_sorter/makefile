@@ -1,0 +1,35 @@
+EXE 		= Photo_sorter
+
+SRC 		= $(wildcard src/*.cpp)
+OBJ 		= $(subst src, build, $(patsubst %.cpp, %.o, $(SRC)))
+
+DBG 		= 	# debug flags
+
+# INCLUDE 	= -I ../include
+# LIB 		= -L ../lib/SFML -lsfml-graphics -lsfml-window -lsfml-system -lopengl32 	# this is for linking SFML with shared libraries
+# LIB 		= -L ../lib/SFML -lsfml-graphics-s -lsfml-window-s -lsfml-system-s -lopengl32 -lfreetype -lwinmm -lgdi32	# this is for static linking SFML
+LIB 		= -L ../lib/SFML # -lopengl32 -lfreetype -lwinmm -lgdi32	# this is for static linking SFML
+EXTRA		= -lcomdlg32 	# for any extra flags you might want to insert
+STATIC  	= -static-libgcc -static-libstdc++  	# for static linking with libgcc and libstdc++
+
+all: link
+
+remake: clean all
+
+image:	# if you ever need to link an image
+	objcopy -I binary -O elf64-x86-64 resources/earth.jpg build/image_bin.o
+
+run:
+	$(EXE)
+
+clean:
+	erase $(subst build/, build\, $(OBJ))
+
+mkbuild:
+	mkdir build
+
+build/%.o: src/%.cpp
+	g++ $(EXTRA) $(INCLUDE) -c src/$*.cpp -o build/$*.o $(DBG)
+
+link: $(OBJ)
+	g++ $(OBJ) -o $(EXE) $(LIB) $(EXTRA) $(STATIC) $(DBG)
