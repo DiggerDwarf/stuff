@@ -1,7 +1,9 @@
 #include <iostream>
-
+#include <string>
 #include <shlobj.h>
+#include <filesystem>
 
+namespace fs = std::filesystem;
 
 bool func(char (* path)[MAX_PATH])
 {
@@ -42,7 +44,21 @@ int main(int argc, char const *argv[])
         return 0;
     
     std::cout << folderPathBuffer << '\n';
-    
+
+    std::string path = folderPathBuffer;
+    path += "\\";
+
+    std::string temp;
+
+    for (const auto & entry : fs::directory_iterator(folderPathBuffer))
+        if (!entry.is_directory())
+        {
+            temp = entry.path().filename().string().substr(4, 6).insert(4, "-");
+            // std::cout << entry.path().filename().string().substr(4, 6).insert(4, "-") << '\n';
+            system(("md \"" + path + temp + " - Vie de famille\"").c_str());
+            system(("move " + entry.path().string() + " \"" + path + temp + " - Vie de famille\"").c_str());
+        }
+
     
     
     {   // previous stuff that i'm leaving here
