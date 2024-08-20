@@ -1,7 +1,7 @@
-EXE 		= SFML_PROJECT_NAME
+EXE 		= obj-render
 
 SRC 		= $(wildcard src/*.cpp)
-OBJ 		= $(subst src, build, $(patsubst %.cpp, %.o, $(SRC)))
+OBJ 		= $(subst src, build, $(patsubst %.cpp, %.o, $(SRC))) build/teapot.o
 
 DBG 		= 	# debug flags
 
@@ -11,12 +11,12 @@ LIB 		= -L ../lib/SFML -lsfml-graphics-s -lsfml-window-s -lsfml-system-s -lopeng
 EXTRA		=  	# for any extra flags you might want to insert
 STATIC  	= -static-libgcc -static-libstdc++ -static 	# for static linking with libgcc and libstdc++
 
-all: link
+all: image link
 
 remake: clean all
 
 image:	# if you ever need to link an image
-	objcopy -I binary -O elf64-x86-64 resources/earth.jpg build/image_bin.o
+	objcopy -I binary -O elf64-x86-64 obj/teapot.obj build/teapot.o
 
 run:
 	$(EXE)

@@ -14,7 +14,7 @@ bool func(char (* path)[MAX_PATH])
     */
 
     BROWSEINFOA bi = { 0 };
-    bi.lpszTitle  = ("Browse for folder...");
+    bi.lpszTitle  = ("Selectionne le dossier avec les photos a trier\nSi tu a ouvert ca par accident, appuye sur Annuler");
     bi.ulFlags    = BIF_RETURNONLYFSDIRS;// | BIF_NEWDIALOGSTYLE;
 
     LPITEMIDLIST pidl = SHBrowseForFolderA ( &bi );
@@ -51,13 +51,14 @@ int main(int argc, char const *argv[])
     std::string temp;
 
     for (const auto & entry : fs::directory_iterator(folderPathBuffer))
-        if (!entry.is_directory())
-        {
-            temp = entry.path().filename().string().substr(4, 6).insert(4, "-");
-            // std::cout << entry.path().filename().string().substr(4, 6).insert(4, "-") << '\n';
-            system(("md \"" + path + temp + " - Vie de famille\"").c_str());
-            system(("move " + entry.path().string() + " \"" + path + temp + " - Vie de famille\"").c_str());
-        }
+    {
+        if (entry.is_directory()) continue;
+        if (entry.path().filename().string().substr(0, 4) != "PXL_") continue;
+        temp = entry.path().filename().string().substr(4, 6).insert(4, " - ");
+        // std::cout << entry.path().filename().string().substr(4, 6).insert(4, "-") << '\n';
+        system(("md \"" + path + temp + " - Vie de famille\"").c_str());
+        system(("move /-Y " + entry.path().string() + " \"" + path + temp + " - Vie de famille\"").c_str());
+    }
 
     
     

@@ -10,7 +10,7 @@ DBG 		= 	# debug flags
 # LIB 		= -L ../lib/SFML -lsfml-graphics-s -lsfml-window-s -lsfml-system-s -lopengl32 -lfreetype -lwinmm -lgdi32	# this is for static linking SFML
 LIB 		= -L ../lib/SFML # -lopengl32 -lfreetype -lwinmm -lgdi32	# this is for static linking SFML
 EXTRA		= -lcomdlg32 	# for any extra flags you might want to insert
-STATIC  	= -static-libgcc -static-libstdc++  	# for static linking with libgcc and libstdc++
+STATIC  	= -static-libgcc -static-libstdc++ -static 	# for static linking with libgcc and libstdc++
 
 all: link
 
