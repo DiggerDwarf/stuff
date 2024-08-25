@@ -7,9 +7,9 @@ DBG 		= 	# debug flags
 
 INCLUDE 	= -I ../include
 # LIB 		= -L ../lib/SFML -lsfml-graphics -lsfml-window -lsfml-system -lopengl32 	# this is for linking SFML with shared libraries
-LIB 		= -L ../lib/SFML -lsfml-graphics-s -lsfml-window-s -lsfml-system-s -lopengl32 -lfreetype -lwinmm -lgdi32	# this is for static linking SFML
-EXTRA		=  	# for any extra flags you might want to insert
-STATIC  	= -static-libgcc -static-libstdc++ -static 	# for static linking with libgcc and libstdc++
+LIB 		= -L ../lib_static/SFML -lsfml-graphics-s -lsfml-window-s -lsfml-system-s -lopengl32 -lfreetype -lwinmm -lgdi32	# this is for static linking SFML
+EXTRA		=  # for any extra flags you might want to insert
+STATIC  	= -static-libgcc -static-libstdc++ -static 	# for static linking with libgcc and libstdc++ and more
 
 all: image link
 
@@ -28,10 +28,7 @@ mkbuild:
 	mkdir build
 
 build/%.o: src/%.cpp
-	g++ $(EXTRA) $(INCLUDE) -c src/$*.cpp -o build/$*.o $(DBG)
+	g++ $(INCLUDE) -c src/$*.cpp -o build/$*.o $(DBG)
 
 link: $(OBJ)
 	g++ $(OBJ) -o $(EXE) $(LIB) $(EXTRA) $(STATIC) $(DBG)
-
-test:
-	g++ src/test.cpp -o test

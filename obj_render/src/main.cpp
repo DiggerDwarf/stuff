@@ -10,13 +10,11 @@ typedef unsigned int uint;
 #define SFML_STATIC
 #include <SFML/Graphics.hpp>
 
-#define WIN_WIDTH 1280.F
-#define WIN_HEIGHT 720.F
+#define WIN_WIDTH  1920.F
+#define WIN_HEIGHT 1080.F
 
 #define MOV_SPEED 0.5F
 #define ROT_SPEED 0.3F
-
-#define pos camera.position
 
 struct Model
 {
@@ -138,8 +136,8 @@ Model get_teapot_info()
 sf::Vector2f projection(std::array<float, 3>& array, Camera& camera)
 {
     return sf::Vector2f(
-        (atan2f(array[0] - pos[0], array[2] - pos[2]) - atanf(camera.angle[0])),
-        (atan2f(array[1] - pos[1], array[2] - pos[2]) - atanf(camera.angle[1]))
+        tanf(atan2f(array[0] - camera.position[0], array[2] - camera.position[2]) - camera.angle[0]),
+        tanf(atan2f(array[1] - camera.position[1], array[2] - camera.position[2]) - camera.angle[1])
     );
 }
 
@@ -166,12 +164,12 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock)
         float s = sin(camera.angle[0]) * dm;
         float c = cos(camera.angle[0]) * dm;
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Z)) { pos[0] += s; pos[2] += c; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) { pos[0] -= s; pos[2] -= c; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Q)) { pos[0] -= c; pos[2] += s; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) { pos[0] += c; pos[2] -= s; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) { pos[1] += dm; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::E)) { pos[1] -= dm; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Z)) { camera.position[0] += s; camera.position[2] += c; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) { camera.position[0] -= s; camera.position[2] -= c; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Q)) { camera.position[0] -= c; camera.position[2] += s; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) { camera.position[0] += c; camera.position[2] -= s; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) { camera.position[1] += dm; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::E)) { camera.position[1] -= dm; }
     }
 
     /* Camera rotation */ {
@@ -216,9 +214,9 @@ int main(int argc, char const *argv[])
     sf::Clock clock;
 
     Camera camera;
-    pos[0] = 0;
-    pos[1] = 0;
-    pos[2] = -3;
+    camera.position[0] = 0;
+    camera.position[1] = 0;
+    camera.position[2] = -3;
     camera.angle[0] = 0;
     camera.angle[1] = 0;
     camera.fovx = 0.79;
