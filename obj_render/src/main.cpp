@@ -1,43 +1,47 @@
 //Start of the obj_render project 
 
-#include <iostream>
-#include <cmath>
-#include <vector>
-#include <array>
+#include <iostream> // I/O
+#include <cmath>    // Meth
+#include <vector>   // Variable-length storage
+#include <array>    // Static-length storage
 
+// Shortcuts
 typedef unsigned int uint;
 typedef std::array<float, 3> coord;
 
 #define SFML_STATIC
-#include <SFML/Graphics.hpp>
+#include <SFML/Graphics.hpp>    // Graphics
 
+// Initial window size
 #define WIN_WIDTH  1920.F
 #define WIN_HEIGHT 1080.F
 
+// Movement and rotation speed through key inputs (units/s)
 #define MOV_SPEED 2.5F
 #define ROT_SPEED 1.5F
 
+// Mouse drag sensitivity
 #define SENSITIVITY 0.005
 
-struct Model
+struct Model    // Model data storage unit
 {
-    std::vector<coord> vertices;
-    std::vector<coord> normals;
-    std::vector<std::array<uint , 3>> faces;
-    sf::Vector2f* projectedBuffer;
+    std::vector<coord> vertices;                // Geometric vertex data in x, y, z form
+    std::vector<coord> normals;                 // Vertex normal vectors
+    std::vector<std::array<uint , 3>> faces;    // Faces vertex indices
+    sf::Vector2f* projectedBuffer;              // Buffer for storing the last projection of the vertices
 };
 
-struct Mat3
+struct Mat3     // 3x3 Matrix data
 {
-    float a1;
-    float a2;
-    float a3;
-    float b1;
-    float b2;
-    float b3;
-    float c1;
-    float c2;
-    float c3;
+    float a1;   // Top left
+    float a2;   // Top middle
+    float a3;   // Top right
+    float b1;   // Middle left
+    float b2;   // Center
+    float b3;   // Middle right
+    float c1;   // Bottom left
+    float c2;   // Bottom middle
+    float c3;   // Bottom right
 };
 
 Mat3 operator*(Mat3 m1, Mat3 m2)
@@ -71,26 +75,31 @@ coord operator-(coord c1, coord c2)
     return coord({c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]});
 }
 
+// Returns wether a projected line segment is contained within the view frustum and must be drawed
 bool can_be_drawed(sf::Vertex vertices[2])
 {
     return ((vertices[0].position.x <= 1) && (vertices[0].position.x >= -1) && (vertices[0].position.y <= 1) && (vertices[0].position.y >= -1)) || \
            ((vertices[1].position.x <= 1) && (vertices[1].position.x >= -1) && (vertices[1].position.y <= 1) && (vertices[1].position.y >= -1));
 }
 
-struct Camera
+struct Camera   // Camera data storage unit
 {
-    coord position;
-    float angle[2];
-    float fovx;
-    float fovy;
-    Mat3 rotationMatrix;
+    coord position;         // Position of the camera
+    float angle[2];         // Angles of the camera (xz plane angle then up-down angle)
+    float fovx;             // Fov of the camera
+    float fovy;             // Please set this value to camera.fovx * (window.height / window.width)
+    Mat3 rotationMatrix;    // Rotation matrix of the camera, to be updated after each camera angle change
 };
 
+// Changes the value of the variable given to be between the low and high thresholds
 template <typename T>
 void clamp(T& val, T low, T high){
     val = std::min(std::max(low, val), high);
 }
 
+// Reads and outputs the value of a float from a char buffer
+// The char pointer must be located on the first character of the float
+// The char pointer will be advanced to the character after the float
 float read_float(const char* (& data))
 {
     float result = 0;
@@ -122,6 +131,9 @@ float read_float(const char* (& data))
     return result;
 }
 
+// Reads and outputs the value of a uint from a char buffer
+// The char pointer must be located on the first character of the uint
+// The char pointer will be advanced to the character after the uint
 uint read_uint(const char* (& data))
 {
     float result = 0;
@@ -136,7 +148,13 @@ uint read_uint(const char* (& data))
     return result;
 }
 
-Model get_model_info(const char* dataStart, size_t dataSize)
+// Extracts model data in the wavefront obj format from a char buffer
+// If the size of the data chunk is unknown, leave blank and the buffer will be read up to the first null-terminator
+// Currently supported :
+//  - geometry vertices
+//  - normals
+//  - face indexed by geometry vertices only
+Model get_model_info(const char* dataStart, size_t dataSize = INFINITY)
 {
     Model model;
 
@@ -195,34 +213,44 @@ Model get_model_info(const char* dataStart, size_t dataSize)
     return model;
 }
 
+
+// Extracts model data in the wavefront obj format from a file path
+// Currently supported : nothing
 Model get_model_info(const char* fileName)
 {
     FILE* file = fopen(fileName, "r");
     Model model;
 
-    // TODO : everything
 
     return model;
 }
 
+// Projects a coord to screen space [-1,1] relative to a camera
 sf::Vector2f projection(coord& vertexCoord, Camera& camera)
 {
+    // Center and align the vertices relative to the camera
     coord proj = camera.rotationMatrix*(vertexCoord-camera.position);
+
+    // Exclude vertices behind the camera
     if (__signbitf(proj[2]))
     {
         return sf::Vector2f(NAN, NAN);
     }
     
+    // Normalize the height relative to the frustum
     return sf::Vector2f(
         proj[0]/(proj[2]*tanf(camera.fovx)),
         proj[1]/(proj[2]*tanf(camera.fovy))
     );
 }
 
+// Handles key inputs and updates the camera
 bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& isMousePressed, sf::Vector2i& mousePos)
 {
+    // Get deltaTime to make a smooth experience
     float dt = clock.restart().asSeconds();
 
+    // Cycle through received events
     sf::Event event;
     while (window.pollEvent(event))
     {
@@ -287,8 +315,10 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::I)) { camera.angle[1] += dr; }
     }
 
+    // Lock the up-down rotation to not look behind upside down
     clamp<float>(camera.angle[1], (float)-M_PI_2, (float)M_PI_2);
 
+    // Update the camera's rotation matrix
     camera.rotationMatrix = 
         Mat3({
             cosf(camera.angle[0]), 0,-sinf(camera.angle[0]),
@@ -303,49 +333,53 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
     return true;
 }
 
+// Render a single Model to the window using a camera as viewpoint
 void Render(sf::RenderWindow& window, Model& model, Camera& camera)
 {
+    // Clear the previous frame
     window.clear();
 
+    // Project the vertices to the camera's screen space and store them in the model's buffer
     for (int i = 0; i < model.vertices.size(); i++)
     {
         model.projectedBuffer[i] = projection(model.vertices[i], camera);
     }
-    
-    sf::Vertex temp[2];
 
+    // Wireframe render, line by line of each triangle
+    sf::Vertex temp[2];
     for (std::array<uint, 3> face : model.faces)
     {
-        // std::cout << "< " << face[0] << ", " << face[1] << ", " << face[2] << " >\n";
         temp[0] = model.projectedBuffer[face[0]];
-        // printf("hey 1\n");
         temp[1] = model.projectedBuffer[face[1]];
-        // printf("hey 2\n");
         if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
         temp[1] = model.projectedBuffer[face[2]];
-        // printf("hey 3\n");
         if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
         temp[0] = model.projectedBuffer[face[2]];
-        // printf("hey 4\n");
         if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
     }
 
+    // Display the result to the screen
     window.display();
 }
 
 int main(int argc, char const *argv[])
 {
+    // Linked model data
     extern const char _binary_obj_cow_obj_start[], _binary_obj_cow_obj_size[];
     const char* binDataStart = _binary_obj_cow_obj_start;
     size_t binDataSize = (size_t)_binary_obj_cow_obj_size;
 
+    // Extract model info
     Model model = get_model_info(binDataStart, binDataSize);
     
+    // Setup the window
     sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Model rendering", sf::Style::Close | sf::Style::Titlebar); //| sf::Style::Resize);
     window.setVerticalSyncEnabled(true);
+    window.setView(sf::View(sf::FloatRect(-1, 1, 2, -2)));
 
     sf::Clock clock;
 
+    // Set the initial state of the camera
     Camera camera;
     camera.position[0] = 0;
     camera.position[1] = 0.5;
@@ -355,18 +389,15 @@ int main(int argc, char const *argv[])
     camera.fovx = 0.79;
     camera.fovy = (WIN_HEIGHT/WIN_WIDTH) * camera.fovx;
 
-    window.setView(sf::View(sf::FloatRect(-1, 1, 2, -2)));
-
+    // Required info for mouse drag
     bool isMousePressed(false);
     sf::Vector2i mousePos(0,0);
-
     
-
+    // Update-draw loop
     while (Update(window, camera, clock, isMousePressed, mousePos))
     {
         Render(window, model, camera);
     }
     
-
     return 0;
 }
