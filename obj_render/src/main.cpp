@@ -6,6 +6,7 @@
 #include <array>
 
 typedef unsigned int uint;
+typedef std::array<float, 3> coord;
 
 #define SFML_STATIC
 #include <SFML/Graphics.hpp>
@@ -13,21 +14,76 @@ typedef unsigned int uint;
 #define WIN_WIDTH  1920.F
 #define WIN_HEIGHT 1080.F
 
-#define MOV_SPEED 0.5F
-#define ROT_SPEED 0.3F
+#define MOV_SPEED 2.5F
+#define ROT_SPEED 1.5F
+
+#define SENSITIVITY 0.005
 
 struct Model
 {
-    std::vector<std::array<float, 3>> vertices;
+    std::vector<coord> vertices;
+    std::vector<coord> normals;
     std::vector<std::array<uint , 3>> faces;
+    sf::Vector2f* projectedBuffer;
 };
+
+struct Mat3
+{
+    float a1;
+    float a2;
+    float a3;
+    float b1;
+    float b2;
+    float b3;
+    float c1;
+    float c2;
+    float c3;
+};
+
+Mat3 operator*(Mat3 m1, Mat3 m2)
+{
+    return Mat3({
+        (m1.a1*m2.a1) + (m1.a2*m2.b1) + (m1.a3*m2.c1),
+        (m1.a1*m2.a2) + (m1.a2*m2.b2) + (m1.a3*m2.c2),
+        (m1.a1*m2.a3) + (m1.a2*m2.b3) + (m1.a3*m2.c3),
+        (m1.b1*m2.a1) + (m1.b2*m2.b1) + (m1.b3*m2.c1),
+        (m1.b1*m2.a2) + (m1.b2*m2.b2) + (m1.b3*m2.c2),
+        (m1.b1*m2.a3) + (m1.b2*m2.b3) + (m1.b3*m2.c3),
+        (m1.c1*m2.a1) + (m1.c2*m2.b1) + (m1.c3*m2.c1),
+        (m1.c1*m2.a2) + (m1.c2*m2.b2) + (m1.c3*m2.c2),
+        (m1.c1*m2.a3) + (m1.c2*m2.b3) + (m1.c3*m2.c3),
+    });
+}
+void operator*=(Mat3 m1, Mat3 m2)
+{
+    m1 = m1*m2;
+}
+coord operator*(Mat3 m, coord c)
+{
+    return coord({
+        (c[0]*m.a1) +(c[1]*m.b1) +(c[2]*m.c1),
+        (c[0]*m.a2) +(c[1]*m.b2) +(c[2]*m.c2),
+        (c[0]*m.a3) +(c[1]*m.b3) +(c[2]*m.c3),
+    });
+}
+coord operator-(coord c1, coord c2)
+{
+    return coord({c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]});
+}
+
+bool can_be_drawed(sf::Vertex vertices[2])
+{
+    return ((vertices[0].position.x <= 1) && (vertices[0].position.x >= -1) && (vertices[0].position.y <= 1) && (vertices[0].position.y >= -1)) || \
+           ((vertices[1].position.x <= 1) && (vertices[1].position.x >= -1) && (vertices[1].position.y <= 1) && (vertices[1].position.y >= -1));
+}
 
 struct Camera
 {
-    float position[3];
+    coord position;
     float angle[2];
     float fovx;
     float fovy;
+    Mat3 rotationMatrix;
 };
 
 template <typename T>
@@ -80,22 +136,21 @@ uint read_uint(const char* (& data))
     return result;
 }
 
-Model get_teapot_info()
+Model get_model_info(const char* dataStart, size_t dataSize)
 {
-    Model teapot;
+    Model model;
 
-    extern const char _binary_obj_teapot_obj_start[], _binary_obj_teapot_obj_size[];
-    const char* binDataStart = _binary_obj_teapot_obj_start;
-    size_t binDataSize = (size_t)_binary_obj_teapot_obj_size;
-
-    const char* charPtr = binDataStart;
+    const char* charPtr = dataStart;
 
     std::array<float, 3> tempF;
     std::array<uint, 3> tempUI;
 
+    std::vector<coord>* target;
+
     while (true)
     {
-        if (*charPtr == '\0') break;
+        if (charPtr > dataStart + dataSize) break;
+        else if (*charPtr == '\0') break;
         else if (*charPtr == '#')
         {
             while (not(*charPtr == '\n' || *charPtr == '\r'))
@@ -103,45 +158,68 @@ Model get_teapot_info()
                 charPtr++;
             }
         }
-        
         else if (*charPtr == 'v')
         {
-            charPtr += 2;
+            charPtr++;
+            if (*charPtr == ' ') target = &(model.vertices);
+            else if (*charPtr == 'n') target = &(model.normals);
+            charPtr++;
             for (int i = 0; i < 3; i++)
             {
                 tempF[i] = read_float(charPtr);
                 charPtr++;
             }
-            teapot.vertices.push_back(tempF);
+            charPtr--;
+            target->push_back(tempF);
         }
         else if (*charPtr == 'f')
         {
             charPtr += 2;
             for (int i = 0; i < 3; i++)
             {
-                tempUI[i] = read_uint(charPtr);
+                tempUI[i] = read_uint(charPtr)-1;
                 charPtr++;
             }
-            teapot.faces.push_back(tempUI);
+            charPtr--;
+            model.faces.push_back(tempUI);
+            // std::cout << "< " << tempUI[0] << ", " << tempUI[1] << ", " << tempUI[2] << " >\n";
         }
         charPtr++;
     }
     
-    std::cout << teapot.vertices.size() << " vertices have been found.\n";
-    std::cout << teapot.faces.size() << " triangles have been found.\n";
+    // std::cout << model.vertices.size() << " vertices have been found.\n";
+    // std::cout << model.faces.size() << " triangles have been found.\n";
 
-    return teapot;
+    model.projectedBuffer = new sf::Vector2f[model.vertices.size()];
+
+    return model;
 }
 
-sf::Vector2f projection(std::array<float, 3>& array, Camera& camera)
+Model get_model_info(const char* fileName)
 {
+    FILE* file = fopen(fileName, "r");
+    Model model;
+
+    // TODO : everything
+
+    return model;
+}
+
+sf::Vector2f projection(coord& vertexCoord, Camera& camera)
+{
+    coord proj = camera.rotationMatrix*(vertexCoord-camera.position);
+    if (__signbitf(proj[2]))
+    {
+        return sf::Vector2f(NAN, NAN);
+    }
+    
     return sf::Vector2f(
-        tanf(atan2f(array[0] - camera.position[0], array[2] - camera.position[2]) - camera.angle[0]),
-        tanf(atan2f(array[1] - camera.position[1], array[2] - camera.position[2]) - camera.angle[1])
+        proj[0]/(proj[2]*tanf(camera.fovx)),
+        proj[1]/(proj[2]*tanf(camera.fovy))
     );
 }
 
-bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock)
+bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& isMousePressed, sf::Vector2i& mousePos)
 {
     float dt = clock.restart().asSeconds();
 
@@ -153,7 +231,26 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock)
         case sf::Event::Closed:
             window.close();
             return false;
+        case sf::Event::KeyPressed:
+            if (event.key.code == sf::Keyboard::Escape)
+            {
+                window.close();
+                return false;
+            }
+            break;
         
+        case sf::Event::MouseButtonPressed:
+            isMousePressed = true;
+            mousePos = sf::Mouse::getPosition();
+            break;
+        case sf::Event::MouseButtonReleased:
+            isMousePressed = false;
+            break;
+            
+        case sf::Event::Resized:
+            camera.fovy = (((float)(event.size.height))/((float)(event.size.width))) * camera.fovx;
+            break;
+
         default:
             break;
         }
@@ -161,8 +258,8 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock)
 
     /* Camera movement */ {
         float dm = dt * MOV_SPEED;
-        float s = sin(camera.angle[0]) * dm;
-        float c = cos(camera.angle[0]) * dm;
+        float s = sin(-camera.angle[0]) * dm;
+        float c = cos(-camera.angle[0]) * dm;
 
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Z)) { camera.position[0] += s; camera.position[2] += c; }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) { camera.position[0] -= s; camera.position[2] -= c; }
@@ -175,11 +272,33 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock)
     /* Camera rotation */ {
         float dr = dt * ROT_SPEED;
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::K)) { camera.angle[1] += dr; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::I)) { camera.angle[1] -= dr; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::J)) { camera.angle[0] -= dr; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::L)) { camera.angle[0] += dr; }
+        if (isMousePressed)
+        {
+            sf::Vector2i npos(sf::Mouse::getPosition());
+            sf::Vector2i moffset(mousePos - npos);
+            mousePos = npos;
+            camera.angle[0] -= moffset.x * SENSITIVITY;
+            camera.angle[1] -= moffset.y * SENSITIVITY;
+        }
+
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::L)) { camera.angle[0] -= dr; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::J)) { camera.angle[0] += dr; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::K)) { camera.angle[1] -= dr; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::I)) { camera.angle[1] += dr; }
     }
+
+    clamp<float>(camera.angle[1], (float)-M_PI_2, (float)M_PI_2);
+
+    camera.rotationMatrix = 
+        Mat3({
+            cosf(camera.angle[0]), 0,-sinf(camera.angle[0]),
+            0,                     1, 0,
+            sinf(camera.angle[0]), 0, cosf(camera.angle[0])
+    }) *Mat3({
+            1, 0,                     0,
+            0, cosf(camera.angle[1]), sinf(camera.angle[1]),
+            0,-sinf(camera.angle[1]), cosf(camera.angle[1])
+    });
 
     return true;
 }
@@ -188,17 +307,27 @@ void Render(sf::RenderWindow& window, Model& model, Camera& camera)
 {
     window.clear();
 
+    for (int i = 0; i < model.vertices.size(); i++)
+    {
+        model.projectedBuffer[i] = projection(model.vertices[i], camera);
+    }
+    
     sf::Vertex temp[2];
 
     for (std::array<uint, 3> face : model.faces)
     {
-        temp[0] = projection(model.vertices[face[0]], camera);
-        temp[1] = projection(model.vertices[face[1]], camera);
-        window.draw(temp, 2, sf::Lines);
-        temp[1] = projection(model.vertices[face[2]], camera);
-        window.draw(temp, 2, sf::Lines);
-        temp[0] = projection(model.vertices[face[2]], camera);
-        window.draw(temp, 2, sf::Lines);
+        // std::cout << "< " << face[0] << ", " << face[1] << ", " << face[2] << " >\n";
+        temp[0] = model.projectedBuffer[face[0]];
+        // printf("hey 1\n");
+        temp[1] = model.projectedBuffer[face[1]];
+        // printf("hey 2\n");
+        if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
+        temp[1] = model.projectedBuffer[face[2]];
+        // printf("hey 3\n");
+        if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
+        temp[0] = model.projectedBuffer[face[2]];
+        // printf("hey 4\n");
+        if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
     }
 
     window.display();
@@ -206,30 +335,38 @@ void Render(sf::RenderWindow& window, Model& model, Camera& camera)
 
 int main(int argc, char const *argv[])
 {
-    Model teapot = get_teapot_info();
+    extern const char _binary_obj_cow_obj_start[], _binary_obj_cow_obj_size[];
+    const char* binDataStart = _binary_obj_cow_obj_start;
+    size_t binDataSize = (size_t)_binary_obj_cow_obj_size;
 
-    sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Hello my little sillies :3", sf::Style::Close | sf::Style::Titlebar);
-    window.setFramerateLimit(20);
+    Model model = get_model_info(binDataStart, binDataSize);
+    
+    sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Model rendering", sf::Style::Close | sf::Style::Titlebar); //| sf::Style::Resize);
+    window.setVerticalSyncEnabled(true);
 
     sf::Clock clock;
 
     Camera camera;
     camera.position[0] = 0;
-    camera.position[1] = 0;
-    camera.position[2] = -3;
+    camera.position[1] = 0.5;
+    camera.position[2] = -5;
     camera.angle[0] = 0;
     camera.angle[1] = 0;
     camera.fovx = 0.79;
     camera.fovy = (WIN_HEIGHT/WIN_WIDTH) * camera.fovx;
 
-    window.setView(sf::View(sf::FloatRect(-camera.fovx, camera.fovy, 2*camera.fovx, -2*camera.fovy)));
+    window.setView(sf::View(sf::FloatRect(-1, 1, 2, -2)));
 
-    while (Update(window, camera, clock))
+    bool isMousePressed(false);
+    sf::Vector2i mousePos(0,0);
+
+    
+
+    while (Update(window, camera, clock, isMousePressed, mousePos))
     {
-        Render(window, teapot, camera);
+        Render(window, model, camera);
     }
     
 
     return 0;
 }
-

@@ -1,7 +1,7 @@
 EXE 		= obj-render
 
 SRC 		= $(wildcard src/*.cpp)
-OBJ 		= $(subst src, build, $(patsubst %.cpp, %.o, $(SRC))) build/teapot.o
+OBJ 		= $(subst src, build, $(patsubst %.cpp, %.o, $(SRC))) build/cow.o
 
 DBG 		= 	# debug flags
 
@@ -11,12 +11,12 @@ LIB 		= -L ../lib_static/SFML -lsfml-graphics-s -lsfml-window-s -lsfml-system-s 
 EXTRA		=  # for any extra flags you might want to insert
 STATIC  	= -static-libgcc -static-libstdc++ -static 	# for static linking with libgcc and libstdc++ and more
 
-all: image link
+all: link
 
 remake: clean all
 
-image:	# if you ever need to link an image
-	objcopy -I binary -O elf64-x86-64 obj/teapot.obj build/teapot.o
+image/%:	# if you ever need to link an image
+	objcopy -I binary -O elf64-x86-64 obj/$*.obj build/$*.o
 
 run:
 	$(EXE)
