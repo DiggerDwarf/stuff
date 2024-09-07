@@ -1,14 +1,14 @@
 EXE 		= obj-render
 
 SRC 		= $(wildcard src/*.cpp)
-OBJ 		= $(subst src, build, $(patsubst %.cpp, %.o, $(SRC))) build/cow.o
+OBJ 		= $(subst src, build, $(patsubst %.cpp, %.o, $(SRC)))
 
 DBG 		= 	# debug flags
 
 INCLUDE 	= -I ../include
 # LIB 		= -L ../lib/SFML -lsfml-graphics -lsfml-window -lsfml-system -lopengl32 	# this is for linking SFML with shared libraries
-LIB 		= -L ../lib_static/SFML -lsfml-graphics-s -lsfml-window-s -lsfml-system-s -lopengl32 -lfreetype -lwinmm -lgdi32	# this is for static linking SFML
-EXTRA		=  # for any extra flags you might want to insert
+LIB 		= -L ../lib/SFML_static -L ../lib/Other -lsfml-graphics-s -lsfml-window-s -lsfml-system-s -lopengl32 -lfreetype -lwinmm -lgdi32 -lcomdlg32	# this is for static linking SFML
+EXTRA		= -Werror
 STATIC  	= -static-libgcc -static-libstdc++ -static 	# for static linking with libgcc and libstdc++ and more
 
 all: link
@@ -28,7 +28,7 @@ mkbuild:
 	mkdir build
 
 build/%.o: src/%.cpp
-	g++ $(INCLUDE) -c src/$*.cpp -o build/$*.o $(DBG)
+	g++ $(INCLUDE) -c src/$*.cpp -o build/$*.o $(DBG) $(EXTRA)
 
 link: $(OBJ)
-	g++ $(OBJ) -o $(EXE) $(LIB) $(EXTRA) $(STATIC) $(DBG)
+	g++ $(OBJ) -o $(EXE) $(LIB) $(STATIC) $(DBG) build/cow.o $(EXTRA)

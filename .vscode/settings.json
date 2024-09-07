@@ -53,6 +53,12 @@
         "sstream": "cpp",
         "stdexcept": "cpp",
         "streambuf": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "span": "cpp",
+        "charconv": "cpp",
+        "format": "cpp",
+        "print": "cpp",
+        "text_encoding": "cpp",
+        "variant": "cpp"
     }
 }

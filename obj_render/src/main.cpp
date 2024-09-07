@@ -1,16 +1,25 @@
 //Start of the obj_render project 
 
-#include <iostream> // I/O
-#include <cmath>    // Meth
-#include <vector>   // Variable-length storage
-#include <array>    // Static-length storage
+#ifndef MAIN_INCLUDES
+#define MAIN_INCLUDES
 
-// Shortcuts
-typedef unsigned int uint;
-typedef std::array<float, 3> coord;
+    #include <iostream> // I/O
+    #include <cmath>    // Meth
+    #include <vector>   // Variable-length storage
+    #include <array>    // Static-length storage
 
-#define SFML_STATIC
-#include <SFML/Graphics.hpp>    // Graphics
+    // Shortcuts
+    typedef unsigned int uint;
+    typedef std::array<float, 3> coord;
+
+    #define SFML_STATIC
+    #include <SFML/Graphics.hpp>    // Graphics
+
+#endif
+
+#include <windows.h>
+#include <commdlg.h>
+#include "model.hpp"
 
 // Initial window size
 #define WIN_WIDTH  1920.F
@@ -23,13 +32,6 @@ typedef std::array<float, 3> coord;
 // Mouse drag sensitivity
 #define SENSITIVITY 0.005
 
-struct Model    // Model data storage unit
-{
-    std::vector<coord> vertices;                // Geometric vertex data in x, y, z form
-    std::vector<coord> normals;                 // Vertex normal vectors
-    std::vector<std::array<uint , 3>> faces;    // Faces vertex indices
-    sf::Vector2f* projectedBuffer;              // Buffer for storing the last projection of the vertices
-};
 
 struct Mat3     // 3x3 Matrix data
 {
@@ -97,133 +99,6 @@ void clamp(T& val, T low, T high){
     val = std::min(std::max(low, val), high);
 }
 
-// Reads and outputs the value of a float from a char buffer
-// The char pointer must be located on the first character of the float
-// The char pointer will be advanced to the character after the float
-float read_float(const char* (& data))
-{
-    float result = 0;
-    float sign = +1;
-    float where = 0;
-
-    while (*data != ' ' && *data != '\r' && *data != '\n' && *data != '\0')
-    {
-        if(*data == '-')
-        {
-            sign = -1;
-        }
-        else if (*data == '.')
-        {
-            where = 1;
-        }
-        else
-        {
-            if (where == 0) result *= 10;
-            result += (*data - '0') / powf(10.F, where);
-            if (where != 0) where += 1;
-        }
-        
-        data++;
-    }
-
-    result *= sign;
-
-    return result;
-}
-
-// Reads and outputs the value of a uint from a char buffer
-// The char pointer must be located on the first character of the uint
-// The char pointer will be advanced to the character after the uint
-uint read_uint(const char* (& data))
-{
-    float result = 0;
-
-    while (*data != ' ' && *data != '\r' && *data != '\n' && *data != '\0')
-    {
-        result *= 10;
-        result += *data - '0';
-        data++;
-    }
-
-    return result;
-}
-
-// Extracts model data in the wavefront obj format from a char buffer
-// If the size of the data chunk is unknown, leave blank and the buffer will be read up to the first null-terminator
-// Currently supported :
-//  - geometry vertices
-//  - normals
-//  - face indexed by geometry vertices only
-Model get_model_info(const char* dataStart, size_t dataSize = INFINITY)
-{
-    Model model;
-
-    const char* charPtr = dataStart;
-
-    std::array<float, 3> tempF;
-    std::array<uint, 3> tempUI;
-
-    std::vector<coord>* target;
-
-    while (true)
-    {
-        if (charPtr > dataStart + dataSize) break;
-        else if (*charPtr == '\0') break;
-        else if (*charPtr == '#')
-        {
-            while (not(*charPtr == '\n' || *charPtr == '\r'))
-            {
-                charPtr++;
-            }
-        }
-        else if (*charPtr == 'v')
-        {
-            charPtr++;
-            if (*charPtr == ' ') target = &(model.vertices);
-            else if (*charPtr == 'n') target = &(model.normals);
-            charPtr++;
-            for (int i = 0; i < 3; i++)
-            {
-                tempF[i] = read_float(charPtr);
-                charPtr++;
-            }
-            charPtr--;
-            target->push_back(tempF);
-        }
-        else if (*charPtr == 'f')
-        {
-            charPtr += 2;
-            for (int i = 0; i < 3; i++)
-            {
-                tempUI[i] = read_uint(charPtr)-1;
-                charPtr++;
-            }
-            charPtr--;
-            model.faces.push_back(tempUI);
-            // std::cout << "< " << tempUI[0] << ", " << tempUI[1] << ", " << tempUI[2] << " >\n";
-        }
-        charPtr++;
-    }
-    
-    // std::cout << model.vertices.size() << " vertices have been found.\n";
-    // std::cout << model.faces.size() << " triangles have been found.\n";
-
-    model.projectedBuffer = new sf::Vector2f[model.vertices.size()];
-
-    return model;
-}
-
-
-// Extracts model data in the wavefront obj format from a file path
-// Currently supported : nothing
-Model get_model_info(const char* fileName)
-{
-    FILE* file = fopen(fileName, "r");
-    Model model;
-
-
-    return model;
-}
 
 // Projects a coord to screen space [-1,1] relative to a camera
 sf::Vector2f projection(coord& vertexCoord, Camera& camera)
@@ -245,7 +120,7 @@ sf::Vector2f projection(coord& vertexCoord, Camera& camera)
 }
 
 // Handles key inputs and updates the camera
-bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& isMousePressed, sf::Vector2i& mousePos)
+bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& isMousePressed, sf::Vector2i& mousePos, Model* model)
 {
     // Get deltaTime to make a smooth experience
     float dt = clock.restart().asSeconds();
@@ -264,6 +139,27 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
             {
                 window.close();
                 return false;
+            }
+            else if (event.key.code == sf::Keyboard::O && event.key.control)
+            {
+                char filename[ MAX_PATH ];
+
+                OPENFILENAMEA ofn;
+                    ZeroMemory( &filename, sizeof( filename ) );
+                    ZeroMemory( &ofn,      sizeof( ofn ) );
+                    ofn.lStructSize  = sizeof( ofn );
+                    ofn.hwndOwner    = window.getSystemHandle();  // If you have a window to center over, put its HANDLE here
+                    ofn.lpstrFilter  = "Any File\0*.*\0";
+                    ofn.lpstrFile    = filename;
+                    ofn.nMaxFile     = MAX_PATH;
+                    ofn.lpstrTitle   = "Select a model to open :";
+                    ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+                
+                if (GetOpenFileNameA( &ofn ))
+                {
+                    *model = get_model_info_file(filename);
+                }
+                else std::cout << "Error: Could not open model.\n";
             }
             break;
         
@@ -394,7 +290,7 @@ int main(int argc, char const *argv[])
     sf::Vector2i mousePos(0,0);
     
     // Update-draw loop
-    while (Update(window, camera, clock, isMousePressed, mousePos))
+    while (Update(window, camera, clock, isMousePressed, mousePos, &model))
     {
         Render(window, model, camera);
     }
