@@ -29,12 +29,15 @@ struct Model    // Model data storage unit
 
 struct File
 {
+private:
     FILE* file;
     char current;
     fpos_t pos;
-
+    bool isOpen = false;
+public:
     File& operator++()
     {
+        if (!this->isOpen) return *this;
         pos++;
         fsetpos(this->file, &this->pos);
         if ((this->current = fgetc(this->file)) == EOF)
@@ -50,6 +53,7 @@ struct File
     }
     File& operator--()
     {
+        if (!this->isOpen) return *this;
         pos--;
         fsetpos(this->file, &this->pos);
         if ((this->current = fgetc(this->file)) == EOF)
@@ -65,23 +69,28 @@ struct File
     }
     char  operator()()
     {
-        return this->current;
+        return this->isOpen ? this->current : '\0';
+    }
+    void open(const char* fileName)
+    {
+        this->isOpen = true;
+        this->file = fopen(fileName, "rb");
+        fgetpos(this->file, &this->pos);
+        this->current = fgetc(this->file);
+        fsetpos(this->file, &this->pos);
+    }
+    void close()
+    {
+        this->isOpen = false;
+        fclose(this->file);
     }
 };
 
-File open(const char* fileName)
-{
-    File file;
-    file.file = fopen(fileName, "rb");
-    fgetpos(file.file, &file.pos);
-    file.current = fgetc(file.file);
-    fsetpos(file.file, &file.pos);
-    return file;
-}
-void close(File file)
-{
-    fclose(file.file);
-}
+float read_float(const char* (& data));
+uint read_uint(const char* (& data));
+float read_float(File& data);
+uint read_uint(File& data);
+
 
 // Reads and outputs the value of a float from a char buffer
 // The char pointer must be located on the first character of the float
@@ -143,6 +152,7 @@ float read_float(File &data)
     float result = 0;
     float sign = +1;
     float where = 0;
+    int expval = 0;
 
     while (data() != ' ' && data() != '\r' && data() != '\n' && data() != '\0')
     {
@@ -162,9 +172,19 @@ float read_float(File &data)
         }
         
         data++;
+
+        if (data() == 'e' || data() == 'E')
+        {
+            data++;
+            expval = (data() == '-') ? -1 : +1;
+            data++;
+            expval *= static_cast<int>(read_uint(data));
+        }
+        
     }
 
     result *= sign;
+    result *= pow(10, expval);
 
     return result;
 }
@@ -264,7 +284,8 @@ Model get_model_info_file(const char* fileName)
 {
     Model model;
 
-    File data = open(fileName);
+    File data;
+    data.open(fileName);
 
     std::array<float, 3> tempF;
     std::array<uint, 3> tempUI;
@@ -315,7 +336,7 @@ Model get_model_info_file(const char* fileName)
 
     model.projectedBuffer = new sf::Vector2f[model.vertices.size()];
 
-    close(data);
+    data.close();
 
     return model;
 }

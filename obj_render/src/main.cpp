@@ -180,6 +180,8 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
         }
     }
 
+    if (window.hasFocus()) {
+
     /* Camera movement */ {
         float dm = dt * MOV_SPEED;
         float s = sin(-camera.angle[0]) * dm;
@@ -226,12 +228,15 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
             0,-sinf(camera.angle[1]), cosf(camera.angle[1])
     });
 
+    } // if has focus end
     return true;
 }
 
 // Render a single Model to the window using a camera as viewpoint
 void Render(sf::RenderWindow& window, Model& model, Camera& camera)
 {
+    if (window.hasFocus()) {
+
     // Clear the previous frame
     window.clear();
 
@@ -253,6 +258,8 @@ void Render(sf::RenderWindow& window, Model& model, Camera& camera)
         temp[0] = model.projectedBuffer[face[2]];
         if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
     }
+
+    } // if has focus end
 
     // Display the result to the screen
     window.display();
