@@ -78,10 +78,21 @@ coord operator-(coord c1, coord c2)
 }
 
 // Returns wether a projected line segment is contained within the view frustum and must be drawed
-bool can_be_drawed(sf::Vertex vertices[2])
+bool can_be_drawed(sf::Vertex vertices[2], int nb_vertices)
 {
-    return ((vertices[0].position.x <= 1) && (vertices[0].position.x >= -1) && (vertices[0].position.y <= 1) && (vertices[0].position.y >= -1)) || \
-           ((vertices[1].position.x <= 1) && (vertices[1].position.x >= -1) && (vertices[1].position.y <= 1) && (vertices[1].position.y >= -1));
+    for (int i = 0; i < nb_vertices; i++)
+    {
+        if ((vertices[0].position.x <= 1) && (vertices[0].position.x >= -1) && (vertices[0].position.y <= 1) && (vertices[0].position.y >= -1)) return true;
+    }
+    return false;
+    
+    // return ((vertices[0].position.x <= 1) && (vertices[0].position.x >= -1) && (vertices[0].position.y <= 1) && (vertices[0].position.y >= -1)) // \
+    //        ((vertices[1].position.x <= 1) && (vertices[1].position.x >= -1) && (vertices[1].position.y <= 1) && (vertices[1].position.y >= -1));
+}
+
+bool can_be_drawed(sf::Vertex vertex)
+{
+    return ((vertex.position.x <= 1) && (vertex.position.x >= -1) && (vertex.position.y <= 1) && (vertex.position.y >= -1));
 }
 
 struct Camera   // Camera data storage unit
@@ -247,16 +258,23 @@ void Render(sf::RenderWindow& window, Model& model, Camera& camera)
     }
 
     // Wireframe render, line by line of each triangle
-    sf::Vertex temp[2];
+    sf::Vertex temp[3];
     for (std::array<uint, 3> face : model.faces)
     {
+        // temp[0] = model.projectedBuffer[face[0]];
+        // temp[1] = model.projectedBuffer[face[1]];
+        // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
+        // temp[1] = model.projectedBuffer[face[2]];
+        // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
+        // temp[0] = model.projectedBuffer[face[1]];
+        // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
+
         temp[0] = model.projectedBuffer[face[0]];
         temp[1] = model.projectedBuffer[face[1]];
-        if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
-        temp[1] = model.projectedBuffer[face[2]];
-        if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
-        temp[0] = model.projectedBuffer[face[2]];
-        if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
+        temp[2] = model.projectedBuffer[face[2]];
+
+        if (can_be_drawed(temp, 3)) window.draw(temp, 3, sf::Triangles);
+
     }
 
     } // if has focus end
