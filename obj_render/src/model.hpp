@@ -12,6 +12,7 @@
     // Shortcuts
     typedef unsigned int uint;
     typedef std::array<float, 3> coord;
+    #define name(var) #var
 
     #define SFML_STATIC
     #include <SFML/Graphics.hpp>    // Graphics
@@ -21,10 +22,12 @@
 
 struct Model    // Model data storage unit
 {
+    coord position;
     std::vector<coord> vertices;                // Geometric vertex data in x, y, z form
     std::vector<coord> normals;                 // Vertex normal vectors
     std::vector<std::array<uint , 3>> faces;    // Faces vertex indices
     sf::Vector2f* projectedBuffer;              // Buffer for storing the last projection of the vertices
+    bool* clipMask;                             // Buffer for storing wether a vertex should be drawn according to its projected coordinates
 };
 
 struct File
@@ -268,6 +271,7 @@ Model get_model_info(const char* dataStart, size_t dataSize = (size_t)INFINITY)
     // std::cout << model.faces.size() << " triangles have been found.\n";
 
     model.projectedBuffer = new sf::Vector2f[model.vertices.size()];
+    model.clipMask = new bool[model.vertices.size()];
 
     return model;
 }
@@ -335,6 +339,7 @@ Model get_model_info_file(const char* fileName)
     // std::cout << model.faces.size() << " triangles have been found.\n";
 
     model.projectedBuffer = new sf::Vector2f[model.vertices.size()];
+    model.clipMask = new bool[model.vertices.size()];
 
     data.close();
 

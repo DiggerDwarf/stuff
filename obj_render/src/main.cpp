@@ -11,6 +11,7 @@
     // Shortcuts
     typedef unsigned int uint;
     typedef std::array<float, 3> coord;
+    #define name(var) #var
 
     #define SFML_STATIC
     #include <SFML/Graphics.hpp>    // Graphics
@@ -30,7 +31,7 @@
 #define ROT_SPEED 1.5F
 
 // Mouse drag sensitivity
-#define SENSITIVITY 0.005
+#define SENSITIVITY 0.002
 
 
 struct Mat3     // 3x3 Matrix data
@@ -78,11 +79,12 @@ coord operator-(coord c1, coord c2)
 }
 
 // Returns wether a projected line segment is contained within the view frustum and must be drawed
-bool can_be_drawed(sf::Vertex vertices[2], int nb_vertices)
+bool can_be_drawed(sf::Vertex* vertices, int nb_vertices)
 {
     for (int i = 0; i < nb_vertices; i++)
     {
-        if ((vertices[0].position.x <= 1) && (vertices[0].position.x >= -1) && (vertices[0].position.y <= 1) && (vertices[0].position.y >= -1)) return true;
+        if ((vertices[i].position.x <= 1.1) && (vertices[i].position.x >= -1.1) && \
+            (vertices[i].position.y <= 1.1) && (vertices[i].position.y >= -1.1)) return true;
     }
     return false;
     
@@ -90,9 +92,9 @@ bool can_be_drawed(sf::Vertex vertices[2], int nb_vertices)
     //        ((vertices[1].position.x <= 1) && (vertices[1].position.x >= -1) && (vertices[1].position.y <= 1) && (vertices[1].position.y >= -1));
 }
 
-bool can_be_drawed(sf::Vertex vertex)
+bool can_be_drawed(sf::Vector2f vertex)
 {
-    return ((vertex.position.x <= 1) && (vertex.position.x >= -1) && (vertex.position.y <= 1) && (vertex.position.y >= -1));
+    return ((vertex.x <= 1) && (vertex.x >= -1) && (vertex.y <= 1) && (vertex.y >= -1));
 }
 
 struct Camera   // Camera data storage unit
@@ -102,6 +104,31 @@ struct Camera   // Camera data storage unit
     float fovx;             // Fov of the camera
     float fovy;             // Please set this value to camera.fovx * (window.height / window.width)
     Mat3 rotationMatrix;    // Rotation matrix of the camera, to be updated after each camera angle change
+};
+
+// A container class for managing multiple Models
+// The Scene will not keep a copy of the Models: therefore, you must.
+struct Scene
+{
+    std::vector<std::pair<char*, Model*>> modelList; // list of models and tags
+    // Add a model to the scene, and give it a unique (or not) tag, which it will be refered by.
+    // If multiple objects are given the same tag, they will be affected at the same time and in the same way when calling the Scene's functions.
+    void addModel(Model* model, char* tag = "default")
+    {
+        this->modelList.push_back(std::pair<char*, Model*>(tag, model));
+    }
+    // Removes all models with the corresponding tag from the scene
+    void removeModel(char* tag)
+    {
+        for (std::vector<std::pair<char*, Model*>>::iterator pair = this->modelList.begin(); pair != this->modelList.end(); pair++)
+        {
+            if (strcmp(tag, pair->first) == 0)
+            {
+                this->modelList.erase(pair);
+                pair--;
+            }
+        }
+    }
 };
 
 // Changes the value of the variable given to be between the low and high thresholds
@@ -123,7 +150,7 @@ sf::Vector2f projection(coord& vertexCoord, Camera& camera)
         return sf::Vector2f(NAN, NAN);
     }
     
-    // Normalize the height relative to the frustum
+    // Normalize the height relative to the frustum depth
     return sf::Vector2f(
         proj[0]/(proj[2]*tanf(camera.fovx)),
         proj[1]/(proj[2]*tanf(camera.fovy))
@@ -160,7 +187,7 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
                     ZeroMemory( &ofn,      sizeof( ofn ) );
                     ofn.lStructSize  = sizeof( ofn );
                     ofn.hwndOwner    = window.getSystemHandle();  // If you have a window to center over, put its HANDLE here
-                    ofn.lpstrFilter  = "Any File\0*.*\0";
+                    ofn.lpstrFilter  = "Object files\0*.obj\0";
                     ofn.lpstrFile    = filename;
                     ofn.nMaxFile     = MAX_PATH;
                     ofn.lpstrTitle   = "Select a model to open :";
@@ -184,6 +211,7 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
             
         case sf::Event::Resized:
             camera.fovy = (((float)(event.size.height))/((float)(event.size.width))) * camera.fovx;
+            window.setSize(sf::Vector2u(event.size.width, event.size.height));
             break;
 
         default:
@@ -246,20 +274,21 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
 // Render a single Model to the window using a camera as viewpoint
 void Render(sf::RenderWindow& window, Model& model, Camera& camera)
 {
-    if (window.hasFocus()) {
-
     // Clear the previous frame
     window.clear();
 
     // Project the vertices to the camera's screen space and store them in the model's buffer
+    // Then construct the clip mask
+
+    
     for (int i = 0; i < model.vertices.size(); i++)
     {
         model.projectedBuffer[i] = projection(model.vertices[i], camera);
+        model.clipMask[i] = can_be_drawed(model.projectedBuffer[i]);
     }
 
-    // Wireframe render, line by line of each triangle
-    sf::Vertex temp[3];
-    for (std::array<uint, 3> face : model.faces)
+
+    for (std::array<uint, 3>& face : model.faces)
     {
         // temp[0] = model.projectedBuffer[face[0]];
         // temp[1] = model.projectedBuffer[face[1]];
@@ -269,15 +298,15 @@ void Render(sf::RenderWindow& window, Model& model, Camera& camera)
         // temp[0] = model.projectedBuffer[face[1]];
         // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
 
-        temp[0] = model.projectedBuffer[face[0]];
-        temp[1] = model.projectedBuffer[face[1]];
-        temp[2] = model.projectedBuffer[face[2]];
+        if (model.clipMask[face[0]] || model.clipMask[face[1]] || model.clipMask[face[2]])
+        {
+            window.draw((sf::Vertex[3]){model.projectedBuffer[face[0]], model.projectedBuffer[face[1]], model.projectedBuffer[face[2]]}, 3, sf::Triangles);
+        }
 
-        if (can_be_drawed(temp, 3)) window.draw(temp, 3, sf::Triangles);
+
+        // if (can_be_drawed(temp, 3)) window.draw(temp, 3, sf::Triangles);
 
     }
-
-    } // if has focus end
 
     // Display the result to the screen
     window.display();
@@ -294,7 +323,7 @@ int main(int argc, char const *argv[])
     Model model = get_model_info(binDataStart, binDataSize);
     
     // Setup the window
-    sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Model rendering", sf::Style::Close | sf::Style::Titlebar); //| sf::Style::Resize);
+    sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Model rendering", sf::Style::Close | sf::Style::Titlebar | sf::Style::Resize);
     window.setVerticalSyncEnabled(true);
     window.setView(sf::View(sf::FloatRect(-1, 1, 2, -2)));
 
