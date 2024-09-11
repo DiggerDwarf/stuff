@@ -57,7 +57,7 @@ int main(int argc, char const *argv[])
         temp = entry.path().filename().string().substr(4, 6).insert(4, " - ");
         // std::cout << entry.path().filename().string().substr(4, 6).insert(4, "-") << '\n';
         system(("md \"" + path + temp + " - Vie de famille\"").c_str());
-        system(("move /-Y " + entry.path().string() + " \"" + path + temp + " - Vie de famille\"").c_str());
+        system(("move /-Y \"" + entry.path().string() + "\" \"" + path + temp + " - Vie de famille\"").c_str());
     }
 
     
