@@ -11,7 +11,6 @@
     // Shortcuts
     typedef unsigned int uint;
     typedef std::array<float, 3> coord;
-    #define name(var) #var
 
     #define SFML_STATIC
     #include <SFML/Graphics.hpp>    // Graphics
@@ -77,7 +76,6 @@ coord operator-(coord c1, coord c2)
 {
     return coord({c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]});
 }
-
 // Returns wether a projected line segment is contained within the view frustum and must be drawed
 bool can_be_drawed(sf::Vertex* vertices, int nb_vertices)
 {
@@ -110,25 +108,46 @@ struct Camera   // Camera data storage unit
 // The Scene will not keep a copy of the Models: therefore, you must.
 struct Scene
 {
-    std::vector<std::pair<char*, Model*>> modelList; // list of models and tags
+    std::vector<std::pair<const char*, Model>> modelList; // list of models and tags
+    std::vector<std::pair<const char*, const char*>> objectList; // list of model tags and tags
     // Add a model to the scene, and give it a unique (or not) tag, which it will be refered by.
-    // If multiple objects are given the same tag, they will be affected at the same time and in the same way when calling the Scene's functions.
-    void addModel(Model* model, char* tag = "default")
+    // If multiple objects are given the same tag, only the first one will be taken into account when creating an object.
+    void add_model(Model model, const char* modelTag)
     {
-        this->modelList.push_back(std::pair<char*, Model*>(tag, model));
+        this->modelList.push_back({modelTag, model});
     }
     // Removes all models with the corresponding tag from the scene
-    void removeModel(char* tag)
+    void remove_model(const char* modelTag)
     {
-        for (std::vector<std::pair<char*, Model*>>::iterator pair = this->modelList.begin(); pair != this->modelList.end(); pair++)
+        for (std::vector<std::pair<const char*, Model>>::iterator pair = this->modelList.begin(); pair != this->modelList.end(); pair++)
         {
-            if (strcmp(tag, pair->first) == 0)
+            if (strcmp(modelTag, pair->first) == 0)
             {
                 this->modelList.erase(pair);
                 pair--;
             }
         }
     }
+    // Spawns an object with the model corresponding to the given tag at the given location. (or not cuz i dont wanna)
+    // As per the models, it will later be interacted with by its tag.
+    // An incorrect modelTag will still be set as is, such that if a corresponding model is added afterwards it'll still work as intended.
+    void spawn_object(const char* modelTag, const char* objectTag = "default")
+    {
+        this->objectList.push_back({modelTag, objectTag});
+    }
+    // Remove all objects with given tag
+    void remove_object(const char* objectTag)
+    {
+        for (std::vector<std::pair<const char*, const char*>>::iterator pair = this->objectList.begin(); pair != this->objectList.end(); pair++)
+        {
+            if (strcmp(objectTag, pair->first) == 0)
+            {
+                this->objectList.erase(pair);
+                pair--;
+            }
+        }
+    }
+
 };
 
 // Changes the value of the variable given to be between the low and high thresholds
@@ -158,7 +177,7 @@ sf::Vector2f projection(coord& vertexCoord, Camera& camera)
 }
 
 // Handles key inputs and updates the camera
-bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& isMousePressed, sf::Vector2i& mousePos, Model* model)
+bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& isMousePressed, sf::Vector2i& mousePos, Scene* scene)
 {
     // Get deltaTime to make a smooth experience
     float dt = clock.restart().asSeconds();
@@ -195,7 +214,10 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
                 
                 if (GetOpenFileNameA( &ofn ))
                 {
-                    *model = get_model_info_file(filename);
+                    char* tag;
+                    sprintf(tag, "%u", scene->modelList.size());
+                    scene->add_model(get_model_info_file(filename), tag);
+                    scene->spawn_object(tag);
                 }
                 else std::cout << "Error: Could not open model.\n";
             }
@@ -272,42 +294,59 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
 }
 
 // Render a single Model to the window using a camera as viewpoint
-void Render(sf::RenderWindow& window, Model& model, Camera& camera)
+void Render(sf::RenderWindow& window, Scene* scene, Camera& camera)
 {
     // Clear the previous frame
     window.clear();
 
-    // Project the vertices to the camera's screen space and store them in the model's buffer
-    // Then construct the clip mask
+    std::vector<Model*> modelsUsed;
 
-    
-    for (int i = 0; i < model.vertices.size(); i++)
+    for (std::pair<const char*, const char*>& object : scene->objectList)
     {
-        model.projectedBuffer[i] = projection(model.vertices[i], camera);
-        model.clipMask[i] = can_be_drawed(model.projectedBuffer[i]);
-    }
-
-
-    for (std::array<uint, 3>& face : model.faces)
-    {
-        // temp[0] = model.projectedBuffer[face[0]];
-        // temp[1] = model.projectedBuffer[face[1]];
-        // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
-        // temp[1] = model.projectedBuffer[face[2]];
-        // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
-        // temp[0] = model.projectedBuffer[face[1]];
-        // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
-
-        if (model.clipMask[face[0]] || model.clipMask[face[1]] || model.clipMask[face[2]])
+        for (std::pair<const char*, Model>& i : scene->modelList)
         {
-            window.draw((sf::Vertex[3]){model.projectedBuffer[face[0]], model.projectedBuffer[face[1]], model.projectedBuffer[face[2]]}, 3, sf::Triangles);
+            if (i.first == object.first)
+            {
+                modelsUsed.push_back(&i.second);
+                break;
+            }
+            
+        }
+        
+    }
+    
+    for (Model* model : modelsUsed)
+    {
+        // Project the vertices to the camera's screen space and store them in the model's buffer
+        // Then construct the clip mask
+        for (int i = 0; i < model->vertices.size(); i++)
+        {
+            model->projectedBuffer[i] = projection(model->vertices[i], camera);
+            model->clipMask[i] = can_be_drawed(model->projectedBuffer[i]);
         }
 
 
-        // if (can_be_drawed(temp, 3)) window.draw(temp, 3, sf::Triangles);
+        for (std::array<uint, 3>& face : model->faces)
+        {
+            // temp[0] = model.projectedBuffer[face[0]];
+            // temp[1] = model.projectedBuffer[face[1]];
+            // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
+            // temp[1] = model.projectedBuffer[face[2]];
+            // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
+            // temp[0] = model.projectedBuffer[face[1]];
+            // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
+
+            if (model->clipMask[face[0]] || model->clipMask[face[1]] || model->clipMask[face[2]])
+            {
+                window.draw((sf::Vertex[3]){model->projectedBuffer[face[0]], model->projectedBuffer[face[1]], model->projectedBuffer[face[2]]}, 3, sf::Lines);
+            }
+
+
+            // if (can_be_drawed(temp, 3)) window.draw(temp, 3, sf::Triangles);
+
+        }
 
     }
-
     // Display the result to the screen
     window.display();
 }
@@ -319,8 +358,12 @@ int main(int argc, char const *argv[])
     const char* binDataStart = _binary_obj_cow_obj_start;
     size_t binDataSize = (size_t)_binary_obj_cow_obj_size;
 
+    Scene scene;
+
     // Extract model info
-    Model model = get_model_info(binDataStart, binDataSize);
+    Model cow = get_model_info(binDataStart, binDataSize);
+    scene.add_model(cow, "cow");
+    scene.spawn_object("cow", "cow");
     
     // Setup the window
     sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Model rendering", sf::Style::Close | sf::Style::Titlebar | sf::Style::Resize);
@@ -344,9 +387,9 @@ int main(int argc, char const *argv[])
     sf::Vector2i mousePos(0,0);
     
     // Update-draw loop
-    while (Update(window, camera, clock, isMousePressed, mousePos, &model))
+    while (Update(window, camera, clock, isMousePressed, mousePos, &scene))
     {
-        Render(window, model, camera);
+        Render(window, &scene, camera);
     }
     
     return 0;

@@ -12,7 +12,6 @@
     // Shortcuts
     typedef unsigned int uint;
     typedef std::array<float, 3> coord;
-    #define name(var) #var
 
     #define SFML_STATIC
     #include <SFML/Graphics.hpp>    // Graphics

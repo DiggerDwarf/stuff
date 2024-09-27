@@ -11,6 +11,14 @@ LIB 		= -L ../lib/SFML_static -L ../lib/Other -lsfml-graphics-s -lsfml-window-s 
 EXTRA		= -Werror
 STATIC  	= -static-libgcc -static-libstdc++ -static 	# for static linking with libgcc and libstdc++ and more
 
+backup:
+	rm backup.exe
+	cp $(EXE).exe backup.exe
+
+restore:
+	rm $(EXE).exe
+	cp backup.exe $(EXE).exe
+
 all: link
 
 remake: clean all
