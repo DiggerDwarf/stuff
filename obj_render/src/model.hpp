@@ -7,6 +7,7 @@
     #include <iostream> // I/O
     #include <cmath>    // Meth
     #include <vector>   // Variable-length storage
+    #include <list>     // double-linked list; can keep pointers stable
     #include <array>    // Static-length storage
 
     // Shortcuts

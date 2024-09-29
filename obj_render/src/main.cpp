@@ -6,6 +6,7 @@
     #include <iostream> // I/O
     #include <cmath>    // Meth
     #include <vector>   // Variable-length storage
+    #include <list>     // double-linked list; can keep pointers stable
     #include <array>    // Static-length storage
 
     // Shortcuts
@@ -14,6 +15,8 @@
 
     #define SFML_STATIC
     #include <SFML/Graphics.hpp>    // Graphics
+
+    #include <thread>
 
 #endif
 
@@ -76,6 +79,19 @@ coord operator-(coord c1, coord c2)
 {
     return coord({c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]});
 }
+Mat3 angles_to_matrix(float angles[2])
+{
+    return Mat3({
+            cosf(angles[0]), 0,-sinf(angles[0]),
+            0,                     1, 0,
+            sinf(angles[0]), 0, cosf(angles[0])
+    }) *Mat3({
+            1, 0,                     0,
+            0, cosf(angles[1]), sinf(angles[1]),
+            0,-sinf(angles[1]), cosf(angles[1])
+    });
+}
+
 // Returns wether a projected line segment is contained within the view frustum and must be drawed
 bool can_be_drawed(sf::Vertex* vertices, int nb_vertices)
 {
@@ -104,25 +120,35 @@ struct Camera   // Camera data storage unit
     Mat3 rotationMatrix;    // Rotation matrix of the camera, to be updated after each camera angle change
 };
 
+struct Object
+{
+    coord position;
+    float angle[2];
+    Model* model;
+    const char* objectTag;
+    const char* modelTag;
+};
+
 // A container class for managing multiple Models
-// The Scene will not keep a copy of the Models: therefore, you must.
+// And multiple Objects
 struct Scene
 {
-    std::vector<std::pair<const char*, Model>> modelList; // list of models and tags
-    std::vector<std::pair<const char*, const char*>> objectList; // list of model tags and tags
+    std::vector<std::pair<const char*, Model*>> modelList; // list of models and tags
+    std::vector<Object> objectList; // list of model tags and tags
     // Add a model to the scene, and give it a unique (or not) tag, which it will be refered by.
     // If multiple objects are given the same tag, only the first one will be taken into account when creating an object.
     void add_model(Model model, const char* modelTag)
     {
-        this->modelList.push_back({modelTag, model});
+        this->modelList.push_back({modelTag, new Model(model)});
     }
     // Removes all models with the corresponding tag from the scene
     void remove_model(const char* modelTag)
     {
-        for (std::vector<std::pair<const char*, Model>>::iterator pair = this->modelList.begin(); pair != this->modelList.end(); pair++)
+        for (std::vector<std::pair<const char*, Model*>>::iterator pair = this->modelList.begin(); pair != this->modelList.end(); pair++)
         {
             if (strcmp(modelTag, pair->first) == 0)
             {
+                delete pair->second;
                 this->modelList.erase(pair);
                 pair--;
             }
@@ -133,17 +159,25 @@ struct Scene
     // An incorrect modelTag will still be set as is, such that if a corresponding model is added afterwards it'll still work as intended.
     void spawn_object(const char* modelTag, const char* objectTag = "default")
     {
-        this->objectList.push_back({modelTag, objectTag});
+        for (std::vector<std::pair<const char*, Model*>>::iterator it = this->modelList.begin(); it != this->modelList.end(); it++)
+        {
+            if (strcmp(it->first, modelTag) == 0)
+            {
+                this->objectList.push_back({{0, 0, 0}, {0, 0}, it->second, objectTag, modelTag});
+                return;
+            }
+        }
+        throw "No such model found";
     }
     // Remove all objects with given tag
     void remove_object(const char* objectTag)
     {
-        for (std::vector<std::pair<const char*, const char*>>::iterator pair = this->objectList.begin(); pair != this->objectList.end(); pair++)
+        for (std::vector<Object>::iterator it = this->objectList.begin(); it != this->objectList.end(); it++)
         {
-            if (strcmp(objectTag, pair->first) == 0)
+            if (strcmp(objectTag, it->objectTag) == 0)
             {
-                this->objectList.erase(pair);
-                pair--;
+                this->objectList.erase(it);
+                it--;
             }
         }
     }
@@ -214,8 +248,9 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
                 
                 if (GetOpenFileNameA( &ofn ))
                 {
-                    char* tag;
-                    sprintf(tag, "%u", scene->modelList.size());
+                    int nb = scene->modelList.size();
+                    char* tag = new char[(int)ceil(log10(nb))+1];
+                    sprintf(tag, "%u", nb);
                     scene->add_model(get_model_info_file(filename), tag);
                     scene->spawn_object(tag);
                 }
@@ -256,7 +291,7 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::E)) { camera.position[1] -= dm; }
     }
 
-    /* Camera rotation */ {
+    /* Camera rotation */ { 
         float dr = dt * ROT_SPEED;
 
         if (isMousePressed)
@@ -278,16 +313,7 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
     clamp<float>(camera.angle[1], (float)-M_PI_2, (float)M_PI_2);
 
     // Update the camera's rotation matrix
-    camera.rotationMatrix = 
-        Mat3({
-            cosf(camera.angle[0]), 0,-sinf(camera.angle[0]),
-            0,                     1, 0,
-            sinf(camera.angle[0]), 0, cosf(camera.angle[0])
-    }) *Mat3({
-            1, 0,                     0,
-            0, cosf(camera.angle[1]), sinf(camera.angle[1]),
-            0,-sinf(camera.angle[1]), cosf(camera.angle[1])
-    });
+    camera.rotationMatrix = angles_to_matrix(camera.angle);
 
     } // if has focus end
     return true;
@@ -298,35 +324,23 @@ void Render(sf::RenderWindow& window, Scene* scene, Camera& camera)
 {
     // Clear the previous frame
     window.clear();
-
-    std::vector<Model*> modelsUsed;
-
-    for (std::pair<const char*, const char*>& object : scene->objectList)
+    for (Object& object : scene->objectList)
     {
-        for (std::pair<const char*, Model>& i : scene->modelList)
+        if (object.model == nullptr)
         {
-            if (i.first == object.first)
-            {
-                modelsUsed.push_back(&i.second);
-                break;
-            }
-            
+            continue;
         }
-        
-    }
-    
-    for (Model* model : modelsUsed)
-    {
+
         // Project the vertices to the camera's screen space and store them in the model's buffer
         // Then construct the clip mask
-        for (int i = 0; i < model->vertices.size(); i++)
+        for (int i = 0; i < object.model->vertices.size(); i++)
         {
-            model->projectedBuffer[i] = projection(model->vertices[i], camera);
-            model->clipMask[i] = can_be_drawed(model->projectedBuffer[i]);
+            object.model->projectedBuffer[i] = projection(object.model->vertices[i], camera);
+            object.model->clipMask[i] = can_be_drawed(object.model->projectedBuffer[i]);
         }
 
 
-        for (std::array<uint, 3>& face : model->faces)
+        for (std::array<uint, 3>& face : object.model->faces)
         {
             // temp[0] = model.projectedBuffer[face[0]];
             // temp[1] = model.projectedBuffer[face[1]];
@@ -336,16 +350,16 @@ void Render(sf::RenderWindow& window, Scene* scene, Camera& camera)
             // temp[0] = model.projectedBuffer[face[1]];
             // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
 
-            if (model->clipMask[face[0]] || model->clipMask[face[1]] || model->clipMask[face[2]])
+            if (object.model->clipMask[face[0]] || object.model->clipMask[face[1]] || object.model->clipMask[face[2]])
             {
-                window.draw((sf::Vertex[3]){model->projectedBuffer[face[0]], model->projectedBuffer[face[1]], model->projectedBuffer[face[2]]}, 3, sf::Lines);
+                window.draw((sf::Vertex[3]){object.model->projectedBuffer[face[0]], 
+                                            object.model->projectedBuffer[face[1]], 
+                                            object.model->projectedBuffer[face[2]]}, 
+                                            3, sf::Lines);
             }
-
-
             // if (can_be_drawed(temp, 3)) window.draw(temp, 3, sf::Triangles);
 
         }
-
     }
     // Display the result to the screen
     window.display();
