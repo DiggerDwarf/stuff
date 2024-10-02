@@ -1,5 +1,7 @@
 //Start of the obj_render project 
 
+#include "model.hpp"
+
 #ifndef MAIN_INCLUDES
 #define MAIN_INCLUDES
 
@@ -23,7 +25,6 @@
 
 #include <windows.h>
 #include <commdlg.h>
-#include "model.hpp"
 
 // Initial window size
 #define WIN_WIDTH  1920.F
