@@ -21,7 +21,14 @@
 #endif
 
 
-struct Model;
+struct Model    // Model data storage unit
+{
+    coord position;
+    std::vector<coord> vertices;        // Geometric vertex data in x, y, z form
+    std::vector<coord> normals;         // Vertex normal vectors
+    std::vector<coord> textureCoords;   // Texture coordinates
+    std::vector<face>  faces;           // Faces vertex indices `(vertex[3], normals[3], uvs[3])`
+};
 
 struct File;    // File conveniency structure
 
