@@ -59,6 +59,22 @@
         "format": "cpp",
         "print": "cpp",
         "text_encoding": "cpp",
-        "variant": "cpp"
-    }
+        "variant": "cpp",
+        "list": "cpp",
+        "semaphore": "cpp",
+        "stop_token": "cpp",
+        "thread": "cpp"
+    },
+    "C_Cpp.default.compilerPath": "C:\\msys64\\ucrt64\\bin\\g++.exe",
+    "makefile.makeDirectory": "c:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render",
+    "makefile.makePath": "mingw32-make",
+    "makefile.makefilePath": "obj_render\\makefile",
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "c:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render",
+            "binaryPath": "c:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render\\obj-render",
+            "binaryArgs": []
+        }
+    ],
+    "makefile.buildLog": ""
 }

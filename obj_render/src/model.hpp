@@ -13,6 +13,7 @@
     // Shortcuts
     typedef unsigned int uint;
     typedef std::array<float, 3> coord;
+    typedef std::array<std::array<uint, 3>, 3> face;
 
     #define SFML_STATIC
     #include <SFML/Graphics.hpp>    // Graphics
@@ -23,21 +24,21 @@
 struct Model    // Model data storage unit
 {
     coord position;
-    std::vector<coord> vertices;                // Geometric vertex data in x, y, z form
-    std::vector<coord> normals;                 // Vertex normal vectors
-    std::vector<std::array<uint , 3>> faces;    // Faces vertex indices
-    sf::Vector2f* projectedBuffer;              // Buffer for storing the last projection of the vertices
-    bool* clipMask;                             // Buffer for storing wether a vertex should be drawn according to its projected coordinates
+    std::vector<coord> vertices;        // Geometric vertex data in x, y, z form
+    std::vector<coord> normals;         // Vertex normal vectors
+    std::vector<coord> textureCoords;   // Texture coordinates
+    std::vector<face>  faces;           // Faces vertex indices `(vertex[3], normals[3], uvs[3])`
 };
 
 struct File
 {
 private:
-    FILE* file;
-    char current;
-    fpos_t pos;
-    bool isOpen = false;
+    FILE* file;             // Actual file object
+    char current;           // Current char in file at pos
+    fpos_t pos;             // Position in file
+    bool isOpen = false;    // Is a file open in this struct
 public:
+    // Advance in the file
     File& operator++()
     {
         if (!this->isOpen) return *this;
@@ -54,6 +55,7 @@ public:
     {
         return ++*this;
     }
+    // Go back in the file
     File& operator--()
     {
         if (!this->isOpen) return *this;
@@ -70,10 +72,12 @@ public:
     {
         return --*this;
     }
+    // Fetch current character
     char  operator()()
     {
         return this->isOpen ? this->current : '\0';
     }
+    // Open a file
     void open(const char* fileName)
     {
         this->isOpen = true;
@@ -82,10 +86,16 @@ public:
         this->current = fgetc(this->file);
         fsetpos(this->file, &this->pos);
     }
+    // Close the file
     void close()
     {
         this->isOpen = false;
         fclose(this->file);
+    }
+
+    void scan(const char* format, va_list __local_argv)
+    {
+        vfscanf(this->file, format, __local_argv);
     }
 };
 
@@ -199,7 +209,7 @@ uint read_uint(File &data)
 {
     float result = 0;
 
-    while (data() != ' ' && data() != '\r' && data() != '\n' && data() != '\0')
+    while (data() >= '0' && data() <= '9')
     {
         result *= 10;
         result += data() - '0';
@@ -223,8 +233,8 @@ Model get_model_info(const char* dataStart, size_t dataSize = (size_t)INFINITY)
 
     const char* charPtr = dataStart;
 
-    std::array<float, 3> tempF;
-    std::array<uint, 3> tempUI;
+    std::array<float, 3> tempVertex;
+    std::array<uint, 3> tempFace;
 
     std::vector<coord>* target;
 
@@ -244,34 +254,32 @@ Model get_model_info(const char* dataStart, size_t dataSize = (size_t)INFINITY)
             charPtr++;
             if (*charPtr == ' ') target = &(model.vertices);
             else if (*charPtr == 'n') target = &(model.normals);
+            else if (*charPtr == 't') target = &(model.textureCoords);
             charPtr++;
             for (int i = 0; i < 3; i++)
             {
-                tempF[i] = read_float(charPtr);
+                tempVertex[i] = read_float(charPtr);
                 charPtr++;
             }
             charPtr--;
-            target->push_back(tempF);
+            target->push_back(tempVertex);
         }
         else if (*charPtr == 'f')
         {
             charPtr += 2;
             for (int i = 0; i < 3; i++)
             {
-                tempUI[i] = read_uint(charPtr)-1;
+                tempFace[i] = read_uint(charPtr)-1;
                 charPtr++;
             }
             charPtr--;
-            model.faces.push_back(tempUI);
+            model.faces.push_back({tempFace, {0, 0, 0}, {0, 0, 0}});
         }
         charPtr++;
     }
     
     // std::cout << model.vertices.size() << " vertices have been found.\n";
     // std::cout << model.faces.size() << " triangles have been found.\n";
-
-    model.projectedBuffer = new sf::Vector2f[model.vertices.size()];
-    model.clipMask = new bool[model.vertices.size()];
 
     return model;
 }
@@ -291,8 +299,8 @@ Model get_model_info_file(const char* fileName)
     File data;
     data.open(fileName);
 
-    std::array<float, 3> tempF;
-    std::array<uint, 3> tempUI;
+    coord tempVertex;
+    face tempFace;
 
     std::vector<coord>* target;
 
@@ -311,14 +319,15 @@ Model get_model_info_file(const char* fileName)
             data++;
             if (data() == ' ') target = &(model.vertices);
             else if (data() == 'n') target = &(model.normals);
+            else if (data() == 't') target = &(model.textureCoords);
             data++;
             for (int i = 0; i < 3; i++)
             {
-                tempF[i] = read_float(data);
+                tempVertex[i] = read_float(data);
                 data++;
             }
             data--;
-            target->push_back(tempF);
+            target->push_back(tempVertex);
         }
         else if (data() == 'f')
         {
@@ -326,20 +335,27 @@ Model get_model_info_file(const char* fileName)
             data++;
             for (int i = 0; i < 3; i++)
             {
-                tempUI[i] = read_uint(data)-1;
+                for (int j = 0; j < 3; j++)
+                {
+                    if (data() < '0' or data() > '9')
+                    {
+                        tempFace[j][i] = 0;
+                        if (data() == '/') data++;
+                        continue;
+                    }
+                    tempFace[j][i] = read_uint(data)-1;
+                }
+                
                 data++;
             }
             data--;
-            model.faces.push_back(tempUI);
+            model.faces.push_back(tempFace);
         }
         data++;
     }
     
     // std::cout << model.vertices.size() << " vertices have been found.\n";
     // std::cout << model.faces.size() << " triangles have been found.\n";
-
-    model.projectedBuffer = new sf::Vector2f[model.vertices.size()];
-    model.clipMask = new bool[model.vertices.size()];
 
     data.close();
 

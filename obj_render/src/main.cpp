@@ -5,13 +5,14 @@
 
     #include <iostream> // I/O
     #include <cmath>    // Meth
-    #include <vector>   // Variable-length storage
+    #include <vector>   // Variable-length storageb
     #include <list>     // double-linked list; can keep pointers stable
     #include <array>    // Static-length storage
 
     // Shortcuts
     typedef unsigned int uint;
     typedef std::array<float, 3> coord;
+    typedef std::array<std::array<uint, 3>, 3> face;
 
     #define SFML_STATIC
     #include <SFML/Graphics.hpp>    // Graphics
@@ -79,6 +80,10 @@ coord operator-(coord c1, coord c2)
 {
     return coord({c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]});
 }
+coord operator+(coord c1, coord c2)
+{
+    return coord({c1[0]+c2[0], c1[1]+c2[1], c1[2]+c2[2]});
+}
 Mat3 angles_to_matrix(float angles[2])
 {
     return Mat3({
@@ -101,9 +106,6 @@ bool can_be_drawed(sf::Vertex* vertices, int nb_vertices)
             (vertices[i].position.y <= 1.1) && (vertices[i].position.y >= -1.1)) return true;
     }
     return false;
-    
-    // return ((vertices[0].position.x <= 1) && (vertices[0].position.x >= -1) && (vertices[0].position.y <= 1) && (vertices[0].position.y >= -1)) // \
-    //        ((vertices[1].position.x <= 1) && (vertices[1].position.x >= -1) && (vertices[1].position.y <= 1) && (vertices[1].position.y >= -1));
 }
 
 bool can_be_drawed(sf::Vector2f vertex)
@@ -120,13 +122,15 @@ struct Camera   // Camera data storage unit
     Mat3 rotationMatrix;    // Rotation matrix of the camera, to be updated after each camera angle change
 };
 
-struct Object
+struct Object   // Object data storage unit
 {
-    coord position;
-    float angle[2];
-    Model* model;
-    const char* objectTag;
-    const char* modelTag;
+    coord position;                     // Object position
+    float angle[2];                     // Object orientation
+    Model* model;                       // Object model
+    const char* objectTag;              // Object tag in the scene
+    const char* modelTag;               // Model tag in the scene
+    sf::Vector2f* projectedBuffer;      // Buffer for storing the last projection of the vertices
+    bool* clipMask;                     // Buffer for storing wether a vertex should be drawn according to its projected coordinates
 };
 
 // A container class for managing multiple Models
@@ -148,6 +152,16 @@ struct Scene
         {
             if (strcmp(modelTag, pair->first) == 0)
             {
+                for (std::vector<Object>::iterator itObject = this->objectList.begin(); itObject != this->objectList.end(); itObject++)
+                {
+                    if (itObject->model == pair->second)
+                    {
+                        this->objectList.erase(itObject);
+                        itObject--;
+                    }
+                    
+                }
+                
                 delete pair->second;
                 this->modelList.erase(pair);
                 pair--;
@@ -163,7 +177,9 @@ struct Scene
         {
             if (strcmp(it->first, modelTag) == 0)
             {
-                this->objectList.push_back({{0, 0, 0}, {0, 0}, it->second, objectTag, modelTag});
+                this->objectList.push_back({{0, 0, 0}, {0, 0}, it->second, objectTag, modelTag, {}, {}});
+                this->objectList[this->objectList.size() - 1].projectedBuffer = new sf::Vector2f[it->second->vertices.size()];
+                this->objectList[this->objectList.size() - 1].clipMask = new bool[it->second->vertices.size()];
                 return;
             }
         }
@@ -182,6 +198,13 @@ struct Scene
         }
     }
 
+    ~Scene()
+    {
+        for (std::pair<const char*, Model*> model : this->modelList)
+        {
+            remove_model(model.first);
+        }
+    }
 };
 
 // Changes the value of the variable given to be between the low and high thresholds
@@ -192,22 +215,27 @@ void clamp(T& val, T low, T high){
 
 
 // Projects a coord to screen space [-1,1] relative to a camera
-sf::Vector2f projection(coord& vertexCoord, Camera& camera)
+void project_to(Object& object, Camera& camera)
 {
-    // Center and align the vertices relative to the camera
-    coord proj = camera.rotationMatrix*(vertexCoord-camera.position);
-
-    // Exclude vertices behind the camera
-    if (__signbitf(proj[2]))
+    Mat3 objectRot = angles_to_matrix(object.angle);
+    for (int i = 0; i < object.model->vertices.size(); i++)
     {
-        return sf::Vector2f(NAN, NAN);
+        // Center and align the vertices relative to the camera
+        coord proj = objectRot*camera.rotationMatrix*(object.model->vertices[i] + object.position - camera.position);
+
+        // Exclude vertices behind the camera
+        if (__signbitf(proj[2]))
+        {
+            object.projectedBuffer[i] = sf::Vector2f(NAN, NAN);
+            continue;
+        }
+        
+        // Normalize the height relative to the frustum depth
+        object.projectedBuffer[i] = sf::Vector2f(
+            proj[0]/(proj[2]*tanf(camera.fovx)),
+            proj[1]/(proj[2]*tanf(camera.fovy))
+        );
     }
-    
-    // Normalize the height relative to the frustum depth
-    return sf::Vector2f(
-        proj[0]/(proj[2]*tanf(camera.fovx)),
-        proj[1]/(proj[2]*tanf(camera.fovy))
-    );
 }
 
 // Handles key inputs and updates the camera
@@ -333,32 +361,22 @@ void Render(sf::RenderWindow& window, Scene* scene, Camera& camera)
 
         // Project the vertices to the camera's screen space and store them in the model's buffer
         // Then construct the clip mask
+        project_to(object, camera);
         for (int i = 0; i < object.model->vertices.size(); i++)
         {
-            object.model->projectedBuffer[i] = projection(object.model->vertices[i], camera);
-            object.model->clipMask[i] = can_be_drawed(object.model->projectedBuffer[i]);
+            object.clipMask[i] = can_be_drawed(object.projectedBuffer[i]);
         }
 
 
-        for (std::array<uint, 3>& face : object.model->faces)
+        for (std::array<std::array<uint, 3>, 3>& face : object.model->faces)
         {
-            // temp[0] = model.projectedBuffer[face[0]];
-            // temp[1] = model.projectedBuffer[face[1]];
-            // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
-            // temp[1] = model.projectedBuffer[face[2]];
-            // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
-            // temp[0] = model.projectedBuffer[face[1]];
-            // if (can_be_drawed(temp)) window.draw(temp, 2, sf::Lines);
-
-            if (object.model->clipMask[face[0]] || object.model->clipMask[face[1]] || object.model->clipMask[face[2]])
+            if (object.clipMask[face[0][0]] || object.clipMask[face[0][1]] || object.clipMask[face[0][2]])
             {
-                window.draw((sf::Vertex[3]){object.model->projectedBuffer[face[0]], 
-                                            object.model->projectedBuffer[face[1]], 
-                                            object.model->projectedBuffer[face[2]]}, 
-                                            3, sf::Lines);
+                window.draw((sf::Vertex[3]){object.projectedBuffer[face[0][0]], 
+                                            object.projectedBuffer[face[0][1]], 
+                                            object.projectedBuffer[face[0][2]]}, 
+                                            3, sf::Triangles);
             }
-            // if (can_be_drawed(temp, 3)) window.draw(temp, 3, sf::Triangles);
-
         }
     }
     // Display the result to the screen
@@ -375,9 +393,13 @@ int main(int argc, char const *argv[])
     Scene scene;
 
     // Extract model info
-    Model cow = get_model_info(binDataStart, binDataSize);
-    scene.add_model(cow, "cow");
-    scene.spawn_object("cow", "cow");
+    // Model cow = get_model_info(binDataStart, binDataSize);
+    // scene.add_model(cow, "cow");
+    // scene.spawn_object("cow", "cow");
+
+    Model teapot = get_model_info_file("C:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render\\obj\\teapot.obj");
+    scene.add_model(teapot, "teapot");
+    scene.spawn_object("teapot", "teapot");
     
     // Setup the window
     sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Model rendering", sf::Style::Close | sf::Style::Titlebar | sf::Style::Resize);
