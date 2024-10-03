@@ -1,23 +1,77 @@
-#include "model.hpp"
 
-#ifndef MAIN_INCLUDES
-#define MAIN_INCLUDES
 
-    #include <iostream> // I/O
-    #include <cmath>    // Meth
-    #include <vector>   // Variable-length storage
-    #include <list>     // double-linked list; can keep pointers stable
-    #include <array>    // Static-length storage
+#include "header.hpp"
 
-    // Shortcuts
-    typedef unsigned int uint;
-    typedef std::array<float, 3> coord;
-    typedef std::array<std::array<uint, 3>, 3> face;
-
-    #define SFML_STATIC
-    #include <SFML/Graphics.hpp>    // Graphics
-
-#endif
+Mat3 operator*(Mat3 m1, Mat3 m2)
+{
+    return Mat3{
+        (m1.a1*m2.a1) + (m1.a2*m2.b1) + (m1.a3*m2.c1),
+        (m1.a1*m2.a2) + (m1.a2*m2.b2) + (m1.a3*m2.c2),
+        (m1.a1*m2.a3) + (m1.a2*m2.b3) + (m1.a3*m2.c3),
+        (m1.b1*m2.a1) + (m1.b2*m2.b1) + (m1.b3*m2.c1),
+        (m1.b1*m2.a2) + (m1.b2*m2.b2) + (m1.b3*m2.c2),
+        (m1.b1*m2.a3) + (m1.b2*m2.b3) + (m1.b3*m2.c3),
+        (m1.c1*m2.a1) + (m1.c2*m2.b1) + (m1.c3*m2.c1),
+        (m1.c1*m2.a2) + (m1.c2*m2.b2) + (m1.c3*m2.c2),
+        (m1.c1*m2.a3) + (m1.c2*m2.b3) + (m1.c3*m2.c3),
+    };
+}
+void operator*=(Mat3& m1, Mat3 m2)
+{
+    m1 = m1*m2;
+}
+coord operator*(Mat3 m, coord c)
+{
+    return coord{
+        (c[0]*m.a1) +(c[1]*m.b1) +(c[2]*m.c1),
+        (c[0]*m.a2) +(c[1]*m.b2) +(c[2]*m.c2),
+        (c[0]*m.a3) +(c[1]*m.b3) +(c[2]*m.c3),
+    };
+}
+coord operator-(coord c1, coord c2)
+{
+    return coord{c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]};
+}
+coord operator+(coord c1, coord c2)
+{
+    return coord{c1[0]+c2[0], c1[1]+c2[1], c1[2]+c2[2]};
+}
+coord operator/(coord c, float n)
+{
+    return coord{c[0]/n, c[1]/n, c[2]/n};
+}
+coord operator*(coord c, float n)
+{
+    return coord{c[0]*n, c[1]*n, c[2]*n};
+}
+coord cross(coord c1, coord c2)
+{
+    return coord{
+        c1[1]*c2[2] - c1[2]*c2[1],
+        c1[2]*c2[0] - c1[0]*c2[2],
+        c1[0]*c2[1] - c1[1]*c2[0]
+    };
+}
+float dot(coord c1, coord c2)
+{
+    return (c1[0]*c2[0])+(c1[1]*c2[1])+(c1[2]*c2[2]);
+}
+Mat3 angles_to_matrix(float angles[2])
+{
+    return Mat3{
+            cosf(angles[0]), 0,-sinf(angles[0]),
+            0,                     1, 0,
+            sinf(angles[0]), 0, cosf(angles[0])
+    } *Mat3{
+            1, 0,                     0,
+            0, cosf(angles[1]), sinf(angles[1]),
+            0,-sinf(angles[1]), cosf(angles[1])
+    };
+}
+coord normalize(coord c)
+{
+    return c/sqrt((c[0]*c[0])+(c[1]*c[1])+(c[2]*c[2]));
+}
 
 
 struct File     // File convenice
@@ -280,7 +334,7 @@ Model get_model_info(const char* dataStart, size_t dataSize)
 //  - geometry vertices
 //  - normals
 //  - face indexed by geometry vertices only
-Model get_model_info_file(const char* fileName)
+Model get_model_info_file(const char* fileName, CONDITION interpretNormals)
 {
     Model model;
 
@@ -341,11 +395,26 @@ Model get_model_info_file(const char* fileName)
         }
         data++;
     }
-    
-    // std::cout << model.vertices.size() << " vertices have been found.\n";
-    // std::cout << model.faces.size() << " triangles have been found.\n";
 
     data.close();
+
+    if ((model.normals.empty() && (interpretNormals == DO_IF)) || (interpretNormals == DO_WHATEVER))
+    {
+        coord normal;
+        for (std::vector<face>::iterator face_it = model.faces.begin(); face_it != model.faces.end(); face_it++)
+        {
+            normal = cross(model.vertices[(*face_it)[0][0]] - model.vertices[(*face_it)[0][1]], model.vertices[(*face_it)[0][1]] - model.vertices[(*face_it)[0][2]]);
+            model.normals.push_back(normal);
+            face_it->operator[](1) = {(uint)model.normals.size()-1, (uint)model.normals.size()-1, (uint)model.normals.size()-1};
+        }
+    }
+
+    for (coord& normal : model.normals)
+    {
+        normal = normalize(normal);
+    }
+    
+    
 
     return model;
 }

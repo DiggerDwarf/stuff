@@ -1,24 +1,44 @@
 #ifndef MODEL_INCLUDED
 #define MODEL_INCLUDED
 
-#ifndef MAIN_INCLUDES
-#define MAIN_INCLUDES
 
-    #include <iostream> // I/O
-    #include <cmath>    // Meth
-    #include <vector>   // Variable-length storage
-    #include <list>     // double-linked list; can keep pointers stable
-    #include <array>    // Static-length storage
+#include <iostream> // I/O
+#include <cmath>    // Meth
+#include <vector>   // Variable-length storage
+#include <list>     // double-linked list; can keep pointers stable
+#include <array>    // Static-length storage
 
-    // Shortcuts
-    typedef unsigned int uint;
-    typedef std::array<float, 3> coord;
-    typedef std::array<std::array<uint, 3>, 3> face;
+// Shortcuts
+typedef unsigned int uint;
+typedef std::array<float, 3> coord;
+typedef std::array<std::array<uint, 3>, 3> face;
 
-    #define SFML_STATIC
-    #include <SFML/Graphics.hpp>    // Graphics
+#define SFML_STATIC
+#include <SFML/Graphics.hpp>    // Graphics
 
-#endif
+
+struct Mat3     // 3x3 Matrix data
+{
+    float a1;   // Top left
+    float a2;   // Top middle
+    float a3;   // Top right
+    float b1;   // Middle left
+    float b2;   // Center
+    float b3;   // Middle right
+    float c1;   // Bottom left
+    float c2;   // Bottom middle
+    float c3;   // Bottom right
+};
+
+Mat3 operator*(Mat3 m1, Mat3 m2);
+void operator*=(Mat3& m1, Mat3 m2);
+coord operator*(Mat3 m, coord c);
+coord operator-(coord c1, coord c2);
+coord operator+(coord c1, coord c2);
+coord cross(coord c1, coord c2);
+float dot(coord c1, coord c2);
+Mat3 angles_to_matrix(float angles[2]);
+coord normalize(coord c);
 
 
 struct Model    // Model data storage unit
@@ -58,6 +78,12 @@ uint read_uint(File& data);
 //  - face indexed by geometry vertices only
 Model get_model_info(const char* dataStart, size_t dataSize = (size_t)INFINITY);
 
+typedef enum {
+    DONT = 0,
+    DO_IF = 1,
+    DO_WHATEVER
+} CONDITION;
+
 // Extracts model data in the wavefront obj format from a file path
 //
 // Currently supported :
@@ -65,6 +91,6 @@ Model get_model_info(const char* dataStart, size_t dataSize = (size_t)INFINITY);
 //  - normals
 //  - UVs
 //  - face indexed by geometry vertices only
-Model get_model_info_file(const char* fileName);
+Model get_model_info_file(const char* fileName, CONDITION interpretNormals = DO_IF);
 
 #endif

@@ -1,27 +1,7 @@
 //Start of the obj_render project 
 
-#include "model.hpp"
+#include "header.hpp"
 
-#ifndef MAIN_INCLUDES
-#define MAIN_INCLUDES
-
-    #include <iostream> // I/O
-    #include <cmath>    // Meth
-    #include <vector>   // Variable-length storageb
-    #include <list>     // double-linked list; can keep pointers stable
-    #include <array>    // Static-length storage
-
-    // Shortcuts
-    typedef unsigned int uint;
-    typedef std::array<float, 3> coord;
-    typedef std::array<std::array<uint, 3>, 3> face;
-
-    #define SFML_STATIC
-    #include <SFML/Graphics.hpp>    // Graphics
-
-    #include <thread>
-
-#endif
 
 #include <windows.h>
 #include <commdlg.h>
@@ -37,65 +17,10 @@
 // Mouse drag sensitivity
 #define SENSITIVITY 0.002
 
-
-struct Mat3     // 3x3 Matrix data
+sf::Color get_diffuse(coord vertex, coord normal, coord light)
 {
-    float a1;   // Top left
-    float a2;   // Top middle
-    float a3;   // Top right
-    float b1;   // Middle left
-    float b2;   // Center
-    float b3;   // Middle right
-    float c1;   // Bottom left
-    float c2;   // Bottom middle
-    float c3;   // Bottom right
-};
-
-Mat3 operator*(Mat3 m1, Mat3 m2)
-{
-    return Mat3({
-        (m1.a1*m2.a1) + (m1.a2*m2.b1) + (m1.a3*m2.c1),
-        (m1.a1*m2.a2) + (m1.a2*m2.b2) + (m1.a3*m2.c2),
-        (m1.a1*m2.a3) + (m1.a2*m2.b3) + (m1.a3*m2.c3),
-        (m1.b1*m2.a1) + (m1.b2*m2.b1) + (m1.b3*m2.c1),
-        (m1.b1*m2.a2) + (m1.b2*m2.b2) + (m1.b3*m2.c2),
-        (m1.b1*m2.a3) + (m1.b2*m2.b3) + (m1.b3*m2.c3),
-        (m1.c1*m2.a1) + (m1.c2*m2.b1) + (m1.c3*m2.c1),
-        (m1.c1*m2.a2) + (m1.c2*m2.b2) + (m1.c3*m2.c2),
-        (m1.c1*m2.a3) + (m1.c2*m2.b3) + (m1.c3*m2.c3),
-    });
-}
-void operator*=(Mat3 m1, Mat3 m2)
-{
-    m1 = m1*m2;
-}
-coord operator*(Mat3 m, coord c)
-{
-    return coord({
-        (c[0]*m.a1) +(c[1]*m.b1) +(c[2]*m.c1),
-        (c[0]*m.a2) +(c[1]*m.b2) +(c[2]*m.c2),
-        (c[0]*m.a3) +(c[1]*m.b3) +(c[2]*m.c3),
-    });
-}
-coord operator-(coord c1, coord c2)
-{
-    return coord({c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]});
-}
-coord operator+(coord c1, coord c2)
-{
-    return coord({c1[0]+c2[0], c1[1]+c2[1], c1[2]+c2[2]});
-}
-Mat3 angles_to_matrix(float angles[2])
-{
-    return Mat3({
-            cosf(angles[0]), 0,-sinf(angles[0]),
-            0,                     1, 0,
-            sinf(angles[0]), 0, cosf(angles[0])
-    }) *Mat3({
-            1, 0,                     0,
-            0, cosf(angles[1]), sinf(angles[1]),
-            0,-sinf(angles[1]), cosf(angles[1])
-    });
+    float coeff = std::max(dot(normal, normalize(light - vertex)), 0.0F);
+    return sf::Color(0xFF*coeff, 0xFF*coeff, 0xFF*coeff);
 }
 
 // Returns wether a projected line segment is contained within the view frustum and must be drawed
@@ -368,15 +293,25 @@ void Render(sf::RenderWindow& window, Scene* scene, Camera& camera)
             object.clipMask[i] = can_be_drawed(object.projectedBuffer[i]);
         }
 
+        sf::Vertex triangle[3];
 
         for (std::array<std::array<uint, 3>, 3>& face : object.model->faces)
         {
             if (object.clipMask[face[0][0]] || object.clipMask[face[0][1]] || object.clipMask[face[0][2]])
             {
-                window.draw((sf::Vertex[3]){object.projectedBuffer[face[0][0]], 
-                                            object.projectedBuffer[face[0][1]], 
-                                            object.projectedBuffer[face[0][2]]}, 
-                                            3, sf::Triangles);
+                triangle[0] = sf::Vertex(
+                    object.projectedBuffer[face[0][0]],
+                    get_diffuse(object.model->vertices[face[0][0]] + object.position, object.model->normals[face[1][0]], camera.position)
+                );
+                triangle[1] = sf::Vertex(
+                    object.projectedBuffer[face[0][1]],
+                    get_diffuse(object.model->vertices[face[0][1]] + object.position, object.model->normals[face[1][1]], camera.position)
+                );
+                triangle[2] = sf::Vertex(
+                    object.projectedBuffer[face[0][2]],
+                    get_diffuse(object.model->vertices[face[0][2]] + object.position, object.model->normals[face[1][2]], camera.position)
+                );
+                window.draw(triangle, 3, sf::Triangles);
             }
         }
     }
@@ -398,7 +333,7 @@ int main(int argc, char const *argv[])
     // scene.add_model(cow, "cow");
     // scene.spawn_object("cow", "cow");
 
-    Model teapot = get_model_info_file("C:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render\\obj\\teapot.obj");
+    Model teapot = get_model_info_file("C:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render\\obj\\teapot.obj", DO_WHATEVER);
     scene.add_model(teapot, "teapot");
     scene.spawn_object("teapot", "teapot");
     
