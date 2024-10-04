@@ -69,7 +69,9 @@ struct Scene
     // If multiple objects are given the same tag, only the first one will be taken into account when creating an object.
     void add_model(Model model, const char* modelTag)
     {
+        printf("Loading model . . .\n");
         this->modelList.push_back({modelTag, new Model(model)});
+        printf("Model loaded !\n");
     }
     // Removes all models with the corresponding tag from the scene
     void remove_model(const char* modelTag)
@@ -99,6 +101,7 @@ struct Scene
     // An incorrect modelTag will still be set as is, such that if a corresponding model is added afterwards it'll still work as intended.
     void spawn_object(const char* modelTag, const char* objectTag = "default")
     {
+        printf("Searching for corresponding model . . .\n");
         for (std::vector<std::pair<const char*, Model*>>::iterator it = this->modelList.begin(); it != this->modelList.end(); it++)
         {
             if (strcmp(it->first, modelTag) == 0)
@@ -106,6 +109,7 @@ struct Scene
                 this->objectList.push_back({{0, 0, 0}, {0, 0}, it->second, objectTag, modelTag, {}});
                 // this->objectList[this->objectList.size() - 1].projectedBuffer = new sf::Vector2f[it->second->vertices.size()];
                 this->objectList[this->objectList.size() - 1].clipMask = new bool[it->second->vertices.size()];
+                printf("Model found; Object added !\n");
                 return;
             }
         }
@@ -208,7 +212,7 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
                 if (GetOpenFileNameA( &ofn ))
                 {
                     int nb = scene->modelList.size();
-                    char* tag = new char[(int)ceil(log10(nb))+1];
+                    char* tag = new char[(int)ceil(log10(nb+2))+1];
                     sprintf(tag, "%u", nb);
                     scene->add_model(get_model_info_file(filename, DO_WHATEVER), tag);
                     scene->spawn_object(tag);
@@ -356,9 +360,9 @@ int main(int argc, char const *argv[])
     // scene.add_model(cow, "cow");
     // scene.spawn_object("cow", "cow");
 
-    Model teapot = get_model_info_file("C:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render\\obj\\cow.obj", DO_WHATEVER);
-    scene.add_model(teapot, "teapot");
-    scene.spawn_object("teapot", "teapot");
+    // Model teapot = get_model_info_file("C:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render\\obj\\cow.obj", DO_WHATEVER);
+    // scene.add_model(teapot, "teapot");
+    // scene.spawn_object("teapot", "teapot");
     
     // Setup the window
     sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Model rendering", sf::Style::Close | sf::Style::Titlebar | sf::Style::Resize);
