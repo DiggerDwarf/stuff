@@ -55,7 +55,7 @@ struct Object   // Object data storage unit
     Model* model;                       // Object model
     const char* objectTag;              // Object tag in the scene
     const char* modelTag;               // Model tag in the scene
-    sf::Vector2f* projectedBuffer;      // Buffer for storing the last projection of the vertices
+    // sf::Vector2f* projectedBuffer;      // Buffer for storing the last projection of the vertices
     bool* clipMask;                     // Buffer for storing wether a vertex should be drawn according to its projected coordinates
 };
 
@@ -103,8 +103,8 @@ struct Scene
         {
             if (strcmp(it->first, modelTag) == 0)
             {
-                this->objectList.push_back({{0, 0, 0}, {0, 0}, it->second, objectTag, modelTag, {}, {}});
-                this->objectList[this->objectList.size() - 1].projectedBuffer = new sf::Vector2f[it->second->vertices.size()];
+                this->objectList.push_back({{0, 0, 0}, {0, 0}, it->second, objectTag, modelTag, {}});
+                // this->objectList[this->objectList.size() - 1].projectedBuffer = new sf::Vector2f[it->second->vertices.size()];
                 this->objectList[this->objectList.size() - 1].clipMask = new bool[it->second->vertices.size()];
                 return;
             }
@@ -141,7 +141,7 @@ void clamp(T& val, T low, T high){
 
 
 // Projects a coord to screen space [-1,1] relative to a camera
-void project_to(Object& object, Camera& camera)
+void project_to(Object& object, Camera& camera, std::pair<sf::Vector2f, float>* buffer)
 {
     Mat3 objectRot = angles_to_matrix(object.angle);
     for (int i = 0; i < object.model->vertices.size(); i++)
@@ -152,16 +152,21 @@ void project_to(Object& object, Camera& camera)
         // Exclude vertices behind the camera
         if (__signbitf(proj[2]))
         {
-            object.projectedBuffer[i] = sf::Vector2f(NAN, NAN);
+            buffer[i] = {sf::Vector2f(NAN, NAN), proj[2]};
             continue;
         }
         
         // Normalize the height relative to the frustum depth
-        object.projectedBuffer[i] = sf::Vector2f(
+        buffer[i] = {sf::Vector2f(
             proj[0]/(proj[2]*tanf(camera.fovx)),
             proj[1]/(proj[2]*tanf(camera.fovy))
-        );
+        ), proj[2]};
     }
+}
+
+bool compare_depth(const std::pair<std::array<sf::Vertex, 3>, float> elem1, const std::pair<std::array<sf::Vertex, 3>, float> elem2)
+{
+    return elem1.second > elem2.second;
 }
 
 // Handles key inputs and updates the camera
@@ -205,7 +210,7 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
                     int nb = scene->modelList.size();
                     char* tag = new char[(int)ceil(log10(nb))+1];
                     sprintf(tag, "%u", nb);
-                    scene->add_model(get_model_info_file(filename), tag);
+                    scene->add_model(get_model_info_file(filename, DO_WHATEVER), tag);
                     scene->spawn_object(tag);
                 }
                 else std::cout << "Error: Could not open model.\n";
@@ -278,6 +283,10 @@ void Render(sf::RenderWindow& window, Scene* scene, Camera& camera)
 {
     // Clear the previous frame
     window.clear();
+
+    std::pair<sf::Vector2f, float>* vertexBuffer;
+    std::vector<std::pair<std::array<sf::Vertex, 3>, float>> triangleBuffer;
+
     for (Object& object : scene->objectList)
     {
         if (object.model == nullptr)
@@ -287,34 +296,48 @@ void Render(sf::RenderWindow& window, Scene* scene, Camera& camera)
 
         // Project the vertices to the camera's screen space and store them in the model's buffer
         // Then construct the clip mask
-        project_to(object, camera);
+        vertexBuffer = new std::pair<sf::Vector2f, float>[object.model->vertices.size()];
+        project_to(object, camera, vertexBuffer);
         for (int i = 0; i < object.model->vertices.size(); i++)
         {
-            object.clipMask[i] = can_be_drawed(object.projectedBuffer[i]);
+            object.clipMask[i] = can_be_drawed(vertexBuffer[i].first);
         }
 
-        sf::Vertex triangle[3];
+        std::array<sf::Vertex, 3> triangle;
 
         for (std::array<std::array<uint, 3>, 3>& face : object.model->faces)
         {
             if (object.clipMask[face[0][0]] || object.clipMask[face[0][1]] || object.clipMask[face[0][2]])
             {
                 triangle[0] = sf::Vertex(
-                    object.projectedBuffer[face[0][0]],
+                    vertexBuffer[face[0][0]].first,
                     get_diffuse(object.model->vertices[face[0][0]] + object.position, object.model->normals[face[1][0]], camera.position)
                 );
                 triangle[1] = sf::Vertex(
-                    object.projectedBuffer[face[0][1]],
+                    vertexBuffer[face[0][1]].first,
                     get_diffuse(object.model->vertices[face[0][1]] + object.position, object.model->normals[face[1][1]], camera.position)
                 );
                 triangle[2] = sf::Vertex(
-                    object.projectedBuffer[face[0][2]],
+                    vertexBuffer[face[0][2]].first,
                     get_diffuse(object.model->vertices[face[0][2]] + object.position, object.model->normals[face[1][2]], camera.position)
                 );
-                window.draw(triangle, 3, sf::Triangles);
+                triangleBuffer.push_back(std::pair<std::array<sf::Vertex, 3>, float>{
+                    triangle,
+                    vertexBuffer[face[0][0]].second + vertexBuffer[face[0][1]].second + vertexBuffer[face[0][2]].second
+                });
             }
         }
+        delete vertexBuffer;
     }
+
+    std::sort<std::vector<std::pair<std::array<sf::Vertex, 3>, float>>::iterator>(triangleBuffer.begin(), triangleBuffer.end(), compare_depth);
+
+    for (std::pair<std::array<sf::Vertex, 3>, float>& triangle_ : triangleBuffer)
+    {
+        window.draw((sf::Vertex[3]){triangle_.first[0], triangle_.first[1], triangle_.first[2]}, 3, sf::Triangles);
+    }
+    
+
     // Display the result to the screen
     window.display();
 }
@@ -333,7 +356,7 @@ int main(int argc, char const *argv[])
     // scene.add_model(cow, "cow");
     // scene.spawn_object("cow", "cow");
 
-    Model teapot = get_model_info_file("C:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render\\obj\\teapot.obj", DO_WHATEVER);
+    Model teapot = get_model_info_file("C:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render\\obj\\cow.obj", DO_WHATEVER);
     scene.add_model(teapot, "teapot");
     scene.spawn_object("teapot", "teapot");
     

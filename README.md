@@ -9,5 +9,8 @@ Photo sorter:
 \
 Obj render:
 - Homemade renderer for .obj files, using libraries only for window handling and basic 2d drawing
-- TODO: improve multi-object mode
-- TODO: add further language support
+- TODO: improve multi-object mode       (interface for choosing and moving models around)
+- TODO: add further language support    (objects, groups, materials and such)
+
+# XCVHKHKCTXEDRYGHIJOGYFGU
+# I DID IT
