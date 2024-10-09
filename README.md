@@ -11,6 +11,6 @@ Obj render:
 - Homemade renderer for .obj files, using libraries only for window handling and basic 2d drawing
 - TODO: improve multi-object mode       (interface for choosing and moving models around)
 - TODO: add further language support    (objects, groups, materials and such)
-
-# XCVHKHKCTXEDRYGHIJOGYFGU
-# I DID IT
+- TODO: add depth map and sh*t for better primitive intersection rendering
+- TODO: change homemade perspective and rotation into Mat4 for view frustum
+- TODO: **fix the hot mess i created (mess not pushed yet)**
