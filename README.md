@@ -13,3 +13,8 @@ Obj render:
 - TODO: add further language support    (objects, groups, materials and such)
 - TODO: add depth map and sh*t for better primitive intersection rendering
 - TODO: change homemade perspective and rotation into Mat4 for view frustum
+- Current controls:
+    - ``zqsd`` to move camera
+    - ``ijkl`` or mouse drag to orient camera
+    - ``tfgh`` to move first object (for debug, error if no objects)
+    - ``cvbn`` to orient first object (for debug, error if no objects)
