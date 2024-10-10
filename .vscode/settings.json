@@ -63,7 +63,8 @@
         "list": "cpp",
         "semaphore": "cpp",
         "stop_token": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "ios": "cpp"
     },
     "C_Cpp.default.compilerPath": "C:\\msys64\\ucrt64\\bin\\g++.exe",
     "makefile.makeDirectory": "c:\\Users\\Nathan\\Documents\\GitHub Repositories\\stuff\\obj_render",

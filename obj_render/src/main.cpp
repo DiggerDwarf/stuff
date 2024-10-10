@@ -2,7 +2,9 @@
 
 #include "header.hpp"
 
+#include <iostream>
 
+#include <thread>
 #include <windows.h>
 #include <commdlg.h>
 
@@ -17,9 +19,9 @@
 // Mouse drag sensitivity
 #define SENSITIVITY 0.002
 
-sf::Color get_diffuse(coord vertex, coord normal, coord light)
+sf::Color get_diffuse(coord vertex, coord normal, coord lightSource)
 {
-    float coeff = std::max(dot(normal, normalize(light - vertex)), 0.0F);
+    float coeff = std::max(dot(normal, normalize(lightSource - vertex)), 0.0F);
     return sf::Color(0xFF*coeff, 0xFF*coeff, 0xFF*coeff);
 }
 
@@ -50,13 +52,13 @@ struct Camera   // Camera data storage unit
 
 struct Object   // Object data storage unit
 {
-    coord position;                     // Object position
-    float angle[2];                     // Object orientation
-    Model* model;                       // Object model
-    const char* objectTag;              // Object tag in the scene
-    const char* modelTag;               // Model tag in the scene
-    // sf::Vector2f* projectedBuffer;      // Buffer for storing the last projection of the vertices
-    bool* clipMask;                     // Buffer for storing wether a vertex should be drawn according to its projected coordinates
+    coord position;             // Object position
+    float angle[2];             // Object orientation
+    Model* model;               // Object model
+    const char* objectTag;      // Object tag in the scene
+    const char* modelTag;       // Model tag in the scene
+    bool* clipMask;             // Buffer for storing wether a vertex should be drawn according to its projected coordinates
+    Mat3 rotationMatrix;        // Rotation matrix of the object
 };
 
 // A container class for managing multiple Models
@@ -128,18 +130,50 @@ struct Scene
         }
     }
 
-    ~Scene()
+    void clear()
     {
         for (std::pair<const char*, Model*> model : this->modelList)
         {
             remove_model(model.first);
         }
     }
+
+    ~Scene()
+    {
+        this->clear();
+    }
 };
+
+void ask_load_model(Scene* scene)
+{
+    char filename[ MAX_PATH ];
+
+    OPENFILENAMEA ofn;
+        ZeroMemory( &filename, sizeof( filename ) );
+        ZeroMemory( &ofn,      sizeof( ofn ) );
+        ofn.lStructSize  = sizeof( ofn );
+        ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
+        ofn.lpstrFilter  = "Object files\0*.obj\0";
+        ofn.lpstrFile    = filename;
+        ofn.nMaxFile     = MAX_PATH;
+        ofn.lpstrTitle   = "Select a model to open :";
+        ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+    
+    if (GetOpenFileNameA( &ofn ))
+    {
+        int nb = scene->modelList.size();
+        char* tag = new char[(int)ceil(log10(nb+2))+1];
+        sprintf(tag, "%u", nb);
+        scene->add_model(get_model_info_file(filename, DO_WHATEVER), tag);
+        scene->spawn_object(tag);
+    }
+    else std::cout << "Error: Could not open model.\n";
+}
 
 // Changes the value of the variable given to be between the low and high thresholds
 template <typename T>
-void clamp(T& val, T low, T high){
+void clamp(T& val, T low, T high)
+{
     val = std::min(std::max(low, val), high);
 }
 
@@ -147,11 +181,11 @@ void clamp(T& val, T low, T high){
 // Projects a coord to screen space [-1,1] relative to a camera
 void project_to(Object& object, Camera& camera, std::pair<sf::Vector2f, float>* buffer)
 {
-    Mat3 objectRot = angles_to_matrix(object.angle);
+    object.rotationMatrix = angles_to_matrix(object.angle);
     for (int i = 0; i < object.model->vertices.size(); i++)
     {
         // Center and align the vertices relative to the camera
-        coord proj = objectRot*camera.rotationMatrix*(object.model->vertices[i] + object.position - camera.position);
+        coord proj = camera.rotationMatrix*(object.position - camera.position + (object.rotationMatrix*object.model->vertices[i]));
 
         // Exclude vertices behind the camera
         if (__signbitf(proj[2]))
@@ -196,28 +230,11 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
             }
             else if (event.key.code == sf::Keyboard::O && event.key.control)
             {
-                char filename[ MAX_PATH ];
-
-                OPENFILENAMEA ofn;
-                    ZeroMemory( &filename, sizeof( filename ) );
-                    ZeroMemory( &ofn,      sizeof( ofn ) );
-                    ofn.lStructSize  = sizeof( ofn );
-                    ofn.hwndOwner    = window.getSystemHandle();  // If you have a window to center over, put its HANDLE here
-                    ofn.lpstrFilter  = "Object files\0*.obj\0";
-                    ofn.lpstrFile    = filename;
-                    ofn.nMaxFile     = MAX_PATH;
-                    ofn.lpstrTitle   = "Select a model to open :";
-                    ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
-                
-                if (GetOpenFileNameA( &ofn ))
-                {
-                    int nb = scene->modelList.size();
-                    char* tag = new char[(int)ceil(log10(nb+2))+1];
-                    sprintf(tag, "%u", nb);
-                    scene->add_model(get_model_info_file(filename, DO_WHATEVER), tag);
-                    scene->spawn_object(tag);
-                }
-                else std::cout << "Error: Could not open model.\n";
+                ask_load_model(scene);
+            }
+            else if (event.key.code == sf::Keyboard::Backspace)
+            {
+                scene->clear();
             }
             break;
         
@@ -230,6 +247,13 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
             break;
             
         case sf::Event::Resized:
+            if (event.size.height > event.size.width)
+            {
+                std::cout << "nuh uh fucker\n";
+                window.close();
+                return false;
+            }
+
             camera.fovy = (((float)(event.size.height))/((float)(event.size.width))) * camera.fovx;
             window.setSize(sf::Vector2u(event.size.width, event.size.height));
             break;
@@ -239,10 +263,24 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
         }
     }
 
+    // Put exceptional event handling (for debug for instance) here
+
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::T)) scene->objectList[0].position[0] += 3*dt;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::G)) scene->objectList[0].position[0] -= 3*dt;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::F)) scene->objectList[0].position[1] -= 3*dt;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::H)) scene->objectList[0].position[1] += 3*dt;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::C)) scene->objectList[0].angle[0] -= 1*dt;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::V)) scene->objectList[0].angle[0] += 1*dt;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::B)) scene->objectList[0].angle[1] -= 1*dt;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::N)) scene->objectList[0].angle[1] += 1*dt;
+
+    // End of exceptional event handling
+
     if (window.hasFocus()) {
 
     /* Camera movement */ {
         float dm = dt * MOV_SPEED;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::LShift)) dm *= 5;
         float s = sin(-camera.angle[0]) * dm;
         float c = cos(-camera.angle[0]) * dm;
 
@@ -261,6 +299,7 @@ bool Update(sf::RenderWindow& window, Camera& camera, sf::Clock& clock, bool& is
         {
             sf::Vector2i npos(sf::Mouse::getPosition());
             sf::Vector2i moffset(mousePos - npos);
+            if (sf::Mouse::isButtonPressed(sf::Mouse::Right)) moffset = -moffset;
             mousePos = npos;
             camera.angle[0] -= moffset.x * SENSITIVITY;
             camera.angle[1] -= moffset.y * SENSITIVITY;
@@ -315,15 +354,15 @@ void Render(sf::RenderWindow& window, Scene* scene, Camera& camera)
             {
                 triangle[0] = sf::Vertex(
                     vertexBuffer[face[0][0]].first,
-                    get_diffuse(object.model->vertices[face[0][0]] + object.position, object.model->normals[face[1][0]], camera.position)
+                    get_diffuse((object.rotationMatrix*object.model->vertices[face[0][0]]) + object.position, object.rotationMatrix*object.model->normals[face[1][0]], camera.position)
                 );
                 triangle[1] = sf::Vertex(
                     vertexBuffer[face[0][1]].first,
-                    get_diffuse(object.model->vertices[face[0][1]] + object.position, object.model->normals[face[1][1]], camera.position)
+                    get_diffuse((object.rotationMatrix*object.model->vertices[face[0][1]]) + object.position, object.rotationMatrix*object.model->normals[face[1][1]], camera.position)
                 );
                 triangle[2] = sf::Vertex(
                     vertexBuffer[face[0][2]].first,
-                    get_diffuse(object.model->vertices[face[0][2]] + object.position, object.model->normals[face[1][2]], camera.position)
+                    get_diffuse((object.rotationMatrix*object.model->vertices[face[0][2]]) + object.position, object.rotationMatrix*object.model->normals[face[1][2]], camera.position)
                 );
                 triangleBuffer.push_back(std::pair<std::array<sf::Vertex, 3>, float>{
                     triangle,

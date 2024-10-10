@@ -13,4 +13,3 @@ Obj render:
 - TODO: add further language support    (objects, groups, materials and such)
 - TODO: add depth map and sh*t for better primitive intersection rendering
 - TODO: change homemade perspective and rotation into Mat4 for view frustum
-- TODO: **fix the hot mess i created (mess not pushed yet)**

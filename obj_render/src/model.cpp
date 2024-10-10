@@ -2,6 +2,11 @@
 
 #include "header.hpp"
 
+#define VERTEX 0
+#define NORMAL 1
+#define UV     2
+
+
 Mat3 operator*(Mat3 m1, Mat3 m2)
 {
     return Mat3{
@@ -277,7 +282,11 @@ Model get_model_info(const char* dataStart, size_t dataSize)
 
     const char* charPtr = dataStart;
 
-    std::array<float, 3> tempVertex;
+    coord tempVertex;
+    uint must;
+    uint optional;
+    float default_;
+
     std::array<uint, 3> tempFace;
 
     std::vector<coord>* target;
@@ -341,15 +350,24 @@ Model get_model_info_file(const char* fileName, CONDITION interpretNormals)
     File data;
     data.open(fileName);
 
-    coord tempVertex;
+    std::array<float, 4> tempVertex;
+    coord tempNormal;
+    coord tempTexture;
+
+    uint type;
+
+    uint must;
+    uint optional;
+    float default_;
+
     face tempFace;
 
-    std::vector<coord>* target;
+    bool isOffset = false;
 
     while (true)
     {
-        if (data() == '\0') break;
-        else if (data() == '#')
+        if (data() == '\0') [[unlikely]] break;
+        else if (data() == '#' || data() == 'o' || data() == 's' || data() == 'g' || data() == 'u') [[unlikely]]
         {
             while (not(data() == '\n' || data() == '\r' || data() == '\0'))
             {
@@ -359,37 +377,94 @@ Model get_model_info_file(const char* fileName, CONDITION interpretNormals)
         else if (data() == 'v')
         {
             data++;
-            if (data() == ' ') target = &(model.vertices);
-            else if (data() == 'n') target = &(model.normals);
-            else if (data() == 't') target = &(model.textureCoords);
-            data++;
-            for (int i = 0; i < 3; i++)
+            if (data() == ' ')          // Geometrix vertex
             {
-                tempVertex[i] = read_float(data);
+                type = VERTEX;
+                must = 3;
+                optional = 1;
+                default_ = 1.0F;
+                // Don't advance further; already on required position
+            }
+            else if (data() == 'n')     // Normal vector
+            {
+                type = NORMAL;
+                must = 3;
+                optional = 0;
+                // no default since no optional
                 data++;
             }
+            else if (data() == 't')     // Texture coordinate
+            {
+                type = UV;
+                must = 1;
+                optional = 2;
+                default_ = 0.0F;
+                data++;
+            }
+            data++;
+            for (int i = 0; i < must; i++)                  // Read required information
+            {
+                if (type == VERTEX)         tempVertex[i]  = read_float(data);
+                else if (type == NORMAL)    tempNormal[i]  = read_float(data);
+                else if (type == UV)        tempTexture[i] = read_float(data);
+                data++;
+            }
+            for (int i = must; i < must + optional; i++)    // Read optional information
+            {
+                if ((data() > '0' && data() < '9') || data() == '-' || data() == '+')       // if still on a number, read it
+                {
+                    if (type == VERTEX)         tempVertex[i]  = read_float(data);
+                    // Normals have no optional
+                    else if (type == UV)        tempTexture[i] = read_float(data);
+                    data++;
+                }
+                else                                    // else put default value
+                {
+                    if (type == VERTEX)         tempVertex[i]  = default_;
+                    // Normals have no optional
+                    else if (type == UV)        tempTexture[i] = default_;
+                }
+                
+            }
+
             data--;
-            target->push_back(tempVertex);
+            if (type == VERTEX)         model.vertices.push_back({tempVertex[0], tempVertex[1], tempVertex[2]});
+            else if (type == NORMAL)    model.normals.push_back(tempNormal);
+            else if (type == UV)        model.textureCoords.push_back(tempTexture);
         }
         else if (data() == 'f')
         {
             data++;
             data++;
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 3; i++)     // for vertex in face
             {
-                for (int j = 0; j < 3; j++)
+                for (int j = 0; j < 3; j++)     // for information in vertex
                 {
-                    if (data() < '0' or data() > '9')
+                    if (data() == '-') [[unlikely]]
                     {
-                        tempFace[j][i] = 0;
-                        if (data() == '/') data++;
-                        continue;
+                        isOffset = true;
+                        data++;
+                        tempFace[j][i] == model.vertices.size() - read_uint(data);
                     }
-                    tempFace[j][i] = read_uint(data)-1;
-                }
+                    else
+                    {
+                        if (data() < '0' or data() > '9')
+                        {
+                            tempFace[j][i] = 0;
+                            if (data() == '/') 
+                            {
+                                data++;
+                                // j++;
+                            }
+                            continue;
+                        }
+                        
+                        tempFace[j][i] = read_uint(data)-1;
+                    }
+                }       // end for info in vertex
                 
                 data++;
-            }
+            }       // end for vertex in face
             data--;
             model.faces.push_back(tempFace);
         }
